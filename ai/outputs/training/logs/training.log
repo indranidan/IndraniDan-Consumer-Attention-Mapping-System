@@ -1,0 +1,19 @@
+[2026-08-03 00:23:41] [INFO    ] Log file: /home/cyborg/Desktop/infosys/Indrani-Consumer-Attention-Mapping-System/ai/outputs/training/logs/training.log
+[2026-08-03 00:23:41] [INFO    ] ══════════════════════════════════════════════════
+[2026-08-03 00:23:41] [INFO    ] Starting YOLOv8 Transfer Learning
+[2026-08-03 00:23:41] [INFO    ] ══════════════════════════════════════════════════
+[2026-08-03 00:23:41] [INFO    ] Model loaded: /home/cyborg/Desktop/infosys/Indrani-Consumer-Attention-Mapping-System/ai/yolov8n.pt
+[2026-08-03 00:23:41] [INFO    ] Training started — this may take a while...
+[2026-08-03 11:48:42] [INFO    ] Training completed successfully!
+[2026-08-03 11:48:42] [INFO    ] Ultralytics run directory: /home/cyborg/Desktop/infosys/Indrani-Consumer-Attention-Mapping-System/ai/outputs/training/yolov8n_sku110k_run1
+[2026-08-03 11:48:42] [INFO    ] ══════════════════════════════════════════════════
+[2026-08-03 11:48:42] [INFO    ] Post-Training Processing
+[2026-08-03 11:48:42] [INFO    ] ══════════════════════════════════════════════════
+[2026-08-03 11:48:42] [INFO    ] Saving checkpoints...
+[2026-08-03 11:48:42] [INFO    ] Saving metrics...
+[2026-08-03 11:48:42] [INFO    ] Generating training plots...
+[2026-08-03 11:48:42] [INFO    ] Plot generation...
+[2026-08-03 11:48:44] [INFO    ] Plot generation — completed in 2.13s
+[2026-08-03 11:48:44] [INFO    ] Generated 5 plot(s)
+[2026-08-03 11:48:44] [INFO    ] Copied 17 Ultralytics plot(s) to /home/cyborg/Desktop/infosys/Indrani-Consumer-Attention-Mapping-System/ai/outputs/training/plots
+[2026-08-03 11:48:44] [INFO    ] Generating training report...

@@ -1,0 +1,10 @@
+# YOLOv8 Dataset Configuration for SKU-110K
+# Generated automatically from .env configuration
+
+path: /home/cyborg/Storage/datasets/SKU 110k/SKU110K_fixed
+train: images/train
+val: images/val
+test: images/test
+nc: 1
+names:
+  0: object

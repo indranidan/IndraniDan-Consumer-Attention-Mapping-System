@@ -1,0 +1,2 @@
+# This directory holds pretrained YOLO model weights.
+# yolov8n.pt will be auto-downloaded here on first run.

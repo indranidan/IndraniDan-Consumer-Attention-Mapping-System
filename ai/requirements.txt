@@ -1,0 +1,28 @@
+# ============================================================
+# AI Module — Python Dependencies (SKU-110K Infrastructure)
+# ============================================================
+# Install with:  pip install -r ai/requirements.txt
+# ============================================================
+
+# Ultralytics YOLOv8
+ultralytics>=8.0.0
+
+# PyTorch
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Computer Vision & Image Processing
+opencv-python>=4.8.0
+Pillow>=10.0.0
+
+# Environment Management
+python-dotenv>=1.0.0
+
+# Data, Analytics & Visualization
+numpy>=1.24.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+PyYAML>=6.0
+
+# COCO Dataset Evaluation Tools
+pycocotools>=2.0.7
