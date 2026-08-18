@@ -6,6 +6,7 @@ Provides a cached singleton via get_settings() for dependency injection.
 """
 
 from functools import lru_cache
+# pyrefly: ignore [missing-import]
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,11 +32,19 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
+    # ── AI Module ─────────────────────────────────────────────
+    AI_OUTPUT_PATH: str = "outputs/ai_jobs"
+    AI_INPUT_PATH: str = "outputs/ai_inputs"
+    AI_PIPELINE_TIMEOUT: int = 3600
+    AI_MAX_CONCURRENT_JOBS: int = 1
+    WEBCAM_DEVICE: int = 0
+
     # ── Pydantic Settings Config ──────────────────────────────
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
     )
 
     @property

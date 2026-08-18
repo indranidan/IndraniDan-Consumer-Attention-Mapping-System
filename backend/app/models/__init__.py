@@ -12,6 +12,7 @@ from app.models.zone import Zone
 from app.models.shelf import Shelf
 from app.models.product import Product
 from app.models.camera import Camera
+from app.models.ai_job import AIJob
 
 __all__ = [
     "Role",
@@ -21,4 +22,5 @@ __all__ = [
     "Shelf",
     "Product",
     "Camera",
+    "AIJob",
 ]

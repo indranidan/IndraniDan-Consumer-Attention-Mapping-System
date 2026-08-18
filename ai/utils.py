@@ -70,6 +70,7 @@ def get_device(preference: str = "auto") -> str:
     str
         Device string suitable for Ultralytics / PyTorch.
     """
+    # pyrefly: ignore [missing-import]
     import torch
 
     logger = setup_logger(__name__)
@@ -194,7 +195,7 @@ def setup_output_directories(base_output_path: Path) -> Dict[str, Path]:
 def print_banner(title: str) -> None:
     """Print a professional section banner to stdout."""
     width = 60
-    border = "═" * width
+    border = "=" * width
     print(f"\n{border}")
     print(f"  {title}")
     print(f"{border}\n")

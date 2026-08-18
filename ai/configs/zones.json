@@ -1,0 +1,58 @@
+{
+    "zones": [
+        {
+            "id": "zone_1",
+            "name": "Beverage Section",
+            "polygon": [
+                [100, 100],
+                [500, 100],
+                [500, 400],
+                [100, 400]
+            ]
+        },
+        {
+            "id": "zone_2",
+            "name": "Snacks Aisle",
+            "polygon": [
+                [520, 100],
+                [900, 100],
+                [900, 400],
+                [520, 400]
+            ]
+        },
+        {
+            "id": "zone_3",
+            "name": "Checkout Area",
+            "polygon": [
+                [100, 420],
+                [500, 420],
+                [500, 700],
+                [100, 700]
+            ]
+        }
+    ],
+    "entry_regions": [
+        {
+            "id": "main_entry",
+            "name": "Main Entrance",
+            "polygon": [
+                [0, 300],
+                [100, 300],
+                [100, 500],
+                [0, 500]
+            ]
+        }
+    ],
+    "exit_regions": [
+        {
+            "id": "main_exit",
+            "name": "Main Exit",
+            "polygon": [
+                [900, 300],
+                [1000, 300],
+                [1000, 500],
+                [900, 500]
+            ]
+        }
+    ]
+}

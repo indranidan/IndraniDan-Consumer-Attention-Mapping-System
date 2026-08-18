@@ -1,0 +1,37 @@
+{
+    "regions": [
+        {
+            "id": "shelf_1",
+            "name": "Beverage Shelf",
+            "type": "shelf",
+            "polygon": [
+                [100, 100],
+                [500, 100],
+                [500, 400],
+                [100, 400]
+            ]
+        },
+        {
+            "id": "shelf_2",
+            "name": "Snacks Shelf",
+            "type": "shelf",
+            "polygon": [
+                [520, 100],
+                [900, 100],
+                [900, 400],
+                [520, 400]
+            ]
+        },
+        {
+            "id": "shelf_3",
+            "name": "Checkout Display",
+            "type": "shelf",
+            "polygon": [
+                [100, 420],
+                [500, 420],
+                [500, 700],
+                [100, 700]
+            ]
+        }
+    ]
+}

@@ -1,4 +1,5 @@
 """
+=================================================
 AI Module — SKU-110K Dataset Verification (CLI)
 =================================================
 Verifies SKU-110K dataset structure, validates image and label pairing for train, val,

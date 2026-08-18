@@ -1,2 +1,72 @@
-venv
+# ══════════════════════════════════════════════════════════════
+#  Indrani Consumer Attention Mapping System — .gitignore
+# ══════════════════════════════════════════════════════════════
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+*.so
+
+# ── Virtual Environment ──────────────────────────────────────
+venv/
+env/
+.venv/
+
+# ── Environment Variables ────────────────────────────────────
 .env
+backend/.env
+frontend/.env
+*.env.local
+
+# ── Testing ──────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── IDE / Editor ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Node / Frontend ─────────────────────────────────────────
+node_modules/
+frontend/dist/
+
+# ══════════════════════════════════════════════════════════════
+#  AI — Model Weights (downloadable / regenerable)
+# ══════════════════════════════════════════════════════════════
+# Pre-trained base models & tasks
+*.pt
+*.task
+ai/*.pt
+ai/coco/*.pt
+ai/models/*.task
+!ai/models/.gitkeep
+
+# ── AI — Training & Inference Outputs (all regenerable) ──────
+ai/outputs/
+ai/**/outputs/
+outputs/
+
+# ── AI — Test / Sample Media ────────────────────────────────
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+# ── ONNX / TensorRT exports ─────────────────────────────────
+*.onnx
+*.engine
+*.torchscript

@@ -26,3 +26,11 @@ PyYAML>=6.0
 
 # COCO Dataset Evaluation Tools
 pycocotools>=2.0.7
+
+# Object Tracking (ByteTrack)
+supervision>=0.21.0
+trackers>=2.6.0
+
+# Head Pose Estimation (Phase 5)
+mediapipe>=0.10.0,<1.0.0
+

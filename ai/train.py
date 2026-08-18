@@ -95,6 +95,51 @@ class TrainingPipeline:
         self.training_start: Optional[float] = None
         self.training_end: Optional[float] = None
 
+    # ── Helper: Check if checkpoint is resumable ──────────────
+    @staticmethod
+    def _check_resumable(checkpoint_path: Path) -> bool:
+        """
+        Inspect a YOLO checkpoint to see if it contains optimizer/epoch
+        state AND the training is incomplete (epochs_done < epochs_total).
+
+        Returns True only when a true Ultralytics ``resume=True`` will work.
+        """
+        try:
+            # pyrefly: ignore [missing-import]
+            import torch as _torch
+
+            ckpt = _torch.load(str(checkpoint_path), map_location="cpu", weights_only=False)
+
+            has_optimizer = "optimizer" in ckpt and ckpt["optimizer"] is not None
+            has_epoch = "epoch" in ckpt and ckpt["epoch"] is not None
+
+            if not (has_optimizer and has_epoch):
+                _get_logger().info(
+                    "Checkpoint missing optimizer/epoch state — not resumable"
+                )
+                return False
+
+            # Check if training was complete
+            epoch_done = ckpt.get("epoch", 0)
+            train_args = ckpt.get("train_args", {})
+            total_epochs = train_args.get("epochs", 0)
+
+            if total_epochs > 0 and epoch_done >= total_epochs - 1:
+                _get_logger().info(
+                    f"Training already completed ({epoch_done + 1}/{total_epochs} epochs) "
+                    f"— not resumable, will use weights for new run"
+                )
+                return False
+
+            _get_logger().info(
+                f"Interrupted training detected ({epoch_done + 1}/{total_epochs} epochs)"
+            )
+            return True
+
+        except Exception as exc:
+            _get_logger().warning(f"Could not inspect checkpoint: {exc}")
+            return False
+
     # ── Step 1: Load Configuration ────────────────────────────
     def load_configuration(self) -> None:
         """Load and validate all configuration from .env."""
@@ -191,6 +236,7 @@ class TrainingPipeline:
         RuntimeError
             If training fails due to OOM, invalid model, or other errors.
         """
+        # pyrefly: ignore [missing-import]
         from ultralytics import YOLO
 
         _get_logger().info("═" * 50)
@@ -227,16 +273,47 @@ class TrainingPipeline:
             "plots": True,
         }
 
-        # Handle resume
+        # Handle resume / continue training
         if cfg.resume_training:
-            last_pt = self.training_dirs["weights"] / "last.pt"
+            # Prefer the Ultralytics run directory checkpoint (has optimizer state)
+            run_last_pt = (
+                self.training_dirs["training"]
+                / cfg.run_name
+                / "weights"
+                / "last.pt"
+            )
+            # Fall back to the canonical copy
+            canonical_last_pt = self.training_dirs["weights"] / "last.pt"
+            last_pt = run_last_pt if run_last_pt.exists() else canonical_last_pt
+
             if last_pt.exists():
-                _get_logger().info(f"Resuming training from: {last_pt}")
-                model = YOLO(str(last_pt))
-                train_args["resume"] = True
+                # Check if checkpoint contains training state (epoch/optimizer)
+                # by attempting a true resume first
+                _get_logger().info(f"Loading checkpoint: {last_pt}")
+
+                _is_resumable = self._check_resumable(last_pt)
+
+                if _is_resumable:
+                    # True resume: interrupted training — let Ultralytics
+                    # restore epoch counter, optimizer, LR scheduler, etc.
+                    _get_logger().info(
+                        "Checkpoint has training state — resuming interrupted run"
+                    )
+                    model = YOLO(str(last_pt))
+                    train_args = {"resume": True}
+                else:
+                    # Completed training: extend with more epochs.
+                    # Load weights as initialization for a new run.
+                    _get_logger().info(
+                        "Previous training completed — starting new run "
+                        "with existing weights as initialization"
+                    )
+                    model = YOLO(str(last_pt))
+                    # Keep all train_args (new epochs, etc.) but no resume flag
             else:
                 _get_logger().warning(
-                    f"Resume requested but last.pt not found at {last_pt}. "
+                    f"Resume requested but no checkpoint found. "
+                    f"Searched:\n  {run_last_pt}\n  {canonical_last_pt}\n"
                     f"Starting fresh training."
                 )
 
@@ -462,6 +539,7 @@ def _copy_ultralytics_plots(run_dir: Path, plots_dir: Path) -> None:
 # Lazy torch import for OOM exception handling
 # ---------------------------------------------------------------------------
 try:
+    # pyrefly: ignore [missing-import]
     import torch
 except ImportError:
     # torch will be imported by ultralytics anyway, this is for type safety

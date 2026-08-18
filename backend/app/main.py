@@ -23,6 +23,7 @@ from app.api.shelves import router as shelves_router
 from app.api.products import router as products_router
 from app.api.cameras import router as cameras_router
 from app.api.dashboard import router as dashboard_router
+from app.api.ai_jobs import router as ai_jobs_router
 
 settings = get_settings()
 
@@ -48,10 +49,12 @@ app = FastAPI(
     description=(
         "Module 1: Authentication & Role-Based Access Control. "
         "Module 2: Store & Shelf Management. "
+        "Module 3: AI-Powered Consumer Attention Analysis. "
         "Provides user registration, login, JWT auth, Google OAuth, "
-        "role-based permissions, and full retail store management."
+        "role-based permissions, full retail store management, "
+        "and AI-driven shopper behavior analytics."
     ),
-    version="2.0.0",
+    version="3.0.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -89,6 +92,9 @@ app.include_router(products_router)
 app.include_router(cameras_router)
 app.include_router(dashboard_router)
 
+# Module 3: AI Analytics
+app.include_router(ai_jobs_router)
+
 
 # ── Health Check ──────────────────────────────────────────────
 @app.get(
@@ -101,7 +107,11 @@ def health_check():
     return {
         "status": "healthy",
         "service": "Consumer Attention Mapping System",
-        "modules": ["Authentication & RBAC", "Store & Shelf Management"],
-        "version": "2.0.0",
+        "modules": [
+            "Authentication & RBAC",
+            "Store & Shelf Management",
+            "AI Consumer Attention Analysis",
+        ],
+        "version": "3.0.0",
     }
 

@@ -1,6 +1,6 @@
 task: detect
 mode: train
-model: /home/cyborg/Desktop/infosys/Indrani-Consumer-Attention-Mapping-System/ai/yolov8n.pt
+model: /home/cyborg/Desktop/infosys/Indrani-Consumer-Attention-Mapping-System/ai/outputs/training/yolov8n_sku110k_run1/weights/last.pt
 data: /home/cyborg/Desktop/infosys/Indrani-Consumer-Attention-Mapping-System/ai/configs/sku110k.yaml
 epochs: 10
 time: null
