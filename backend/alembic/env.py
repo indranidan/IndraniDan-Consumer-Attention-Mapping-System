@@ -12,7 +12,7 @@ from alembic import context
 
 # ── Import our models and config ──────────────────────────────
 # This import ensures all models are registered with Base.metadata
-from app.models import Role, User, Store, Zone, Shelf, Product, Camera  # noqa: F401
+from app.models import Role, User, Store, Zone, Shelf, Product, Camera, AIJob  # noqa: F401
 from app.database.database import Base
 from app.core.config import get_settings
 

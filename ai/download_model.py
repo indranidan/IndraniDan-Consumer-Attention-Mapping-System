@@ -17,8 +17,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+# pyrefly: ignore [missing-import]
 import torch
+# pyrefly: ignore [missing-import]
 import ultralytics
+# pyrefly: ignore [missing-import]
 from ultralytics import YOLO
 
 from ai.config import load_config

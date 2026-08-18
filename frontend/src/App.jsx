@@ -21,6 +21,7 @@ import Zones from "./pages/Zones";
 import Shelves from "./pages/Shelves";
 import Products from "./pages/Products";
 import Cameras from "./pages/Cameras";
+import AIAnalytics from "./pages/AIAnalytics";
 
 export default function App() {
   return (
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="/shelves" element={<Shelves />} />
               <Route path="/products" element={<Products />} />
               <Route path="/cameras" element={<Cameras />} />
+              <Route path="/analytics" element={<AIAnalytics />} />
             </Route>
           </Route>
 

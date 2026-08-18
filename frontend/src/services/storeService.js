@@ -69,3 +69,35 @@ export const createCamera = (data) => api.post("/api/cameras", data);
 export const updateCamera = (id, data) => api.put(`/api/cameras/${id}`, data);
 
 export const deleteCamera = (id) => api.delete(`/api/cameras/${id}`);
+
+// ── AI Analytics ─────────────────────────────────────────────
+export const createAIJob = (data) => {
+  if (data instanceof FormData) {
+    return api.post("/api/ai/jobs", data, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  }
+  const formData = new FormData();
+  Object.keys(data).forEach((key) => {
+    if (data[key] !== undefined && data[key] !== null) {
+      formData.append(key, data[key]);
+    }
+  });
+  return api.post("/api/ai/jobs", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
+export const getAIJobs = (params = {}) =>
+  api.get("/api/ai/jobs", { params });
+
+export const getAIJob = (jobId) => api.get(`/api/ai/jobs/${jobId}`);
+
+export const stopAIJob = (jobId) => api.post(`/api/ai/jobs/${jobId}/stop`);
+
+export const getAIJobResults = (jobId) =>
+  api.get(`/api/ai/jobs/${jobId}/results`);
+
+export const getAIFileUrl = (jobId, filePath) =>
+  `${api.defaults.baseURL}/api/ai/results/${jobId}/files/${filePath}`;
+

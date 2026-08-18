@@ -589,7 +589,7 @@ def generate_training_report(
         "",
         "---",
         "",
-        "*Report generated automatically by the Indrani Consumer Attention Mapping System.*",
+        "*Report generated automatically by the Consumer Attention Mapping System.*",
         "",
     ]
 

@@ -1,6 +1,6 @@
 # YOLOv8 SKU-110K Transfer Learning — Training Report
 
-**Generated**: 2026-08-03 11:48:44
+**Generated**: 2026-08-08 11:28:23
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Parameter | Value |
 |-----------|-------|
-| Training Date | 2026-08-03 11:48:44 |
+| Training Date | 2026-08-08 11:28:23 |
 | Model Used | `yolov8n.pt` |
 | Dataset | `/home/cyborg/Storage/datasets/SKU 110k/SKU110K_fixed` |
 | Dataset YAML | `/home/cyborg/Desktop/infosys/Indrani-Consumer-Attention-Mapping-System/ai/configs/sku110k.yaml` |
@@ -16,7 +16,7 @@
 | Image Size | 416 |
 | Batch Size | 4 |
 | Device | `cpu` |
-| Training Time | 11:25:00 |
+| Training Time | 10:25:03 |
 
 ---
 
@@ -24,10 +24,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Precision | 0.8401 |
-| Recall | 0.7347 |
-| mAP50 | 0.7401 |
-| mAP50-95 | 0.4159 |
+| Precision | 0.8684 |
+| Recall | 0.7733 |
+| mAP50 | 0.7785 |
+| mAP50-95 | 0.4519 |
 
 ---
 
