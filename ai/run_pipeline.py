@@ -203,17 +203,29 @@ def main() -> None:
     completed_phases = []
     failed_phase = None
 
-    for num, name, cmd in phases:
-        if num < args.start_phase:
-            print(f"  [Skipping Phase {num}: {name} (start-phase is {args.start_phase})]")
-            continue
+    # If start_phase is 1 (default full pipeline run), use the optimized Unified Single-Pass Pipeline
+    if args.start_phase == 1:
+        print_header("OPTIMIZED EXECUTION: RUNNING UNIFIED SINGLE-PASS PIPELINE (PHASES 1-6)")
+        try:
+            from ai.unified_pipeline import run_unified_pipeline
+            run_unified_pipeline(source=args.source)
+            for num, name, _ in phases:
+                completed_phases.append((num, name))
+        except Exception as exc:
+            print(f"\n  [ERROR] Unified pipeline execution failed: {exc}\n")
+            failed_phase = (1, "Unified Single-Pass Pipeline")
+    else:
+        for num, name, cmd in phases:
+            if num < args.start_phase:
+                print(f"  [Skipping Phase {num}: {name} (start-phase is {args.start_phase})]")
+                continue
 
-        success = run_phase(num, name, cmd)
-        if success:
-            completed_phases.append((num, name))
-        else:
-            failed_phase = (num, name)
-            break
+            success = run_phase(num, name, cmd)
+            if success:
+                completed_phases.append((num, name))
+            else:
+                failed_phase = (num, name)
+                break
 
     # Summary
     total_elapsed = time.perf_counter() - total_start
