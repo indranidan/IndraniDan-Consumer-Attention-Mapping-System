@@ -40,20 +40,6 @@ ai/
     ├── logs/             # Pipeline execution log files
     └── reports/          # Verification & diagnostic reports
 ```
-
----
-
-## 📋 Prerequisites & Hardware Specifications
-
-| Requirement | Specification / Recommended |
-|-------------|----------------------------|
-| Operating System | Kali Linux / Linux |
-| Processor (CPU) | AMD Ryzen 3 3250U (2 cores, 4 threads) |
-| System RAM | 8 GB |
-| Python Version | Python 3.10+ |
-| Compute Device | CPU (automatic GPU detection if CUDA is available) |
-| SKU-110K Dataset | Stored at `/home/cyborg/Storage/datasets/SKU 110k/SKU110K_fixed` |
-
 ---
 
 ## ⚙️ Environment Variables Setup
