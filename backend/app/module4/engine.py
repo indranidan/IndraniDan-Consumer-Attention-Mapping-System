@@ -17,6 +17,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# pyrefly: ignore [missing-import]
 import cv2
 import numpy as np
 
@@ -182,6 +183,57 @@ class Module4AttentionEngine:
             except Exception as exc:
                 self.logger.warning(f"Could not load Phase 5 attention events: {exc}")
 
+        # 2b. Backfill gaze_origin from Phase 2 tracks when Phase 5 events lack spatial coordinates
+        events_missing_origin = [e for e in events if not e.gaze_origin]
+        if events_missing_origin:
+            p2_tracks_file = job_output_dir / "phase2" / "reports" / "tracks.json"
+            if p2_tracks_file.exists():
+                try:
+                    with open(p2_tracks_file, "r", encoding="utf-8") as f:
+                        p2_data = json.load(f)
+                    # Build frame -> {track_id: track_info} lookup
+                    frame_track_map: Dict[int, Dict[int, dict]] = {}
+                    for frame_entry in p2_data.get("frames", []):
+                        frame_num = frame_entry.get("frame", 0)
+                        tracks_in_frame: Dict[int, dict] = {}
+                        for t in frame_entry.get("tracks", []):
+                            tracks_in_frame[t.get("track_id", -1)] = t
+                        frame_track_map[frame_num] = tracks_in_frame
+
+                    # Direction string to unit-vector mapping for gaze_direction
+                    direction_vectors = {
+                        "LEFT": (-1.0, 0.0),
+                        "RIGHT": (1.0, 0.0),
+                        "UP": (0.0, -1.0),
+                        "DOWN": (0.0, 1.0),
+                        "CENTER": (0.0, 0.0),
+                    }
+
+                    for ev in events_missing_origin:
+                        # Find the person's bbox at the event's start_frame
+                        frame_tracks = frame_track_map.get(ev.start_frame, {})
+                        track_info = frame_tracks.get(ev.track_id)
+                        if track_info:
+                            bbox = track_info.get("bbox")
+                            if bbox and len(bbox) == 4:
+                                x1, y1, x2, y2 = bbox
+                                # Use top-center of bbox as head/gaze origin
+                                head_x = int((x1 + x2) / 2)
+                                head_y = int(y1 + (y2 - y1) * 0.15)  # ~15% from top ≈ head level
+                                ev.gaze_origin = (head_x, head_y)
+
+                                # Derive gaze_direction from attention_direction
+                                dir_str = (ev.attention_direction or "UNKNOWN").upper()
+                                ev.gaze_direction = direction_vectors.get(dir_str, (0.0, 0.0))
+
+                    backfilled = sum(1 for e in events_missing_origin if e.gaze_origin)
+                    self.logger.info(
+                        f"Backfilled gaze_origin for {backfilled}/{len(events_missing_origin)} "
+                        f"events from Phase 2 tracking data"
+                    )
+                except Exception as exc:
+                    self.logger.warning(f"Could not backfill gaze_origin from Phase 2 tracks: {exc}")
+
         # 3. Compute shelf engagement metrics
         shelves_config = shelf_regions or [
             {"id": r.id, "name": r.name, "type": r.type} for r in self.shelf_analyzer.regions.values()
@@ -242,11 +294,13 @@ class Module4AttentionEngine:
 
         # Save reports under job_output_dir / "module4"
         m4_dir = job_output_dir / "module4"
-        self.report_generator.write_reports(report_data, m4_dir)
 
-        # Generate Heatmap
+        # Generate Heatmap BEFORE writing reports so heatmap data is included in JSON
         heatmap_path = m4_dir / "attention_heatmap.png"
         self.heatmap_generator.render_heatmap_image(events, heatmap_path)
         report_data["heatmap"] = self.heatmap_generator.generate_heatmap_data(events)
 
+        self.report_generator.write_reports(report_data, m4_dir)
+
         return report_data
+
