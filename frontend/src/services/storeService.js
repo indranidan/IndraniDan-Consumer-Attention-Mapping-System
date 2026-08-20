@@ -101,3 +101,26 @@ export const getAIJobResults = (jobId) =>
 export const getAIFileUrl = (jobId, filePath) =>
   `${api.defaults.baseURL}/api/ai/results/${jobId}/files/${filePath}`;
 
+// ── Module 4: Attention Analysis Engine ───────────────────────
+export const getModule4Analysis = (jobId) =>
+  api.get(`/api/module4/jobs/${jobId}/attention-analysis`);
+
+export const getModule4ShelfMetrics = (jobId) =>
+  api.get(`/api/module4/jobs/${jobId}/shelf-metrics`);
+
+export const getModule4ProductMetrics = (jobId) =>
+  api.get(`/api/module4/jobs/${jobId}/product-metrics`);
+
+export const getModule4Events = (jobId, params = {}) =>
+  api.get(`/api/module4/jobs/${jobId}/events`, { params });
+
+export const getModule4Report = (jobId) =>
+  api.get(`/api/module4/jobs/${jobId}/report`);
+
+export const getModule4Heatmap = (jobId) =>
+  api.get(`/api/module4/jobs/${jobId}/heatmap`);
+
+export const runModule4Job = (jobId) =>
+  api.post(`/api/module4/jobs/${jobId}/run`);
+
+

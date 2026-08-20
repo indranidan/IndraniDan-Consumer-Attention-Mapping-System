@@ -17,6 +17,7 @@ import {
 } from "../services/storeService";
 import PageHeader from "../components/ui/PageHeader";
 import Modal from "../components/ui/Modal";
+import Module4AttentionAnalytics from "../components/module4/Module4AttentionAnalytics";
 
 const STATUS_COLORS = {
   QUEUED: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
@@ -103,6 +104,8 @@ export default function AIAnalytics() {
   const [resultsData, setResultsData] = useState(null);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [resultsTab, setResultsTab] = useState("module4"); // "module4" | "module3"
+
 
   // Error modal
   const [errorModal, setErrorModal] = useState(false);
@@ -780,11 +783,44 @@ export default function AIAnalytics() {
         onClose={() => {
           setResultsModal(false);
           setResultsData(null);
+          setResultsTab("module4");
         }}
-        title={`Analysis Results — ${selectedJob?.camera_name || ""}`}
-        maxWidth="max-w-4xl"
+        title={`Analytics Results — ${selectedJob?.camera_name || ""}`}
+        maxWidth="max-w-5xl"
       >
-        {resultsLoading ? (
+        {/* Module Switcher Tabs */}
+        <div className="flex items-center gap-2 mb-6 border-b border-gray-800 pb-3">
+          <button
+            type="button"
+            onClick={() => setResultsTab("module4")}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+              resultsTab === "module4"
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
+                : "bg-gray-800/40 text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Module 4 — Attention Analysis Engine
+          </button>
+          <button
+            type="button"
+            onClick={() => setResultsTab("module3")}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+              resultsTab === "module3"
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
+                : "bg-gray-800/40 text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Module 3 — Tracking & Movement Analytics
+          </button>
+        </div>
+
+        {resultsTab === "module4" ? (
+          <Module4AttentionAnalytics jobId={selectedJob?.id} job={selectedJob} />
+        ) : resultsLoading ? (
           <div className="p-8 text-center">
             <div className="w-8 h-8 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
             <p className="text-sm text-gray-500">Loading results...</p>
