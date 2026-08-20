@@ -15,7 +15,7 @@ Preserves separate events for repeated attention (no auto-merge).
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from ai.attention_analysis.attention_classifier import AttentionDirection, AttentionState
 from ai.logger import setup_logger
@@ -40,6 +40,8 @@ class AttentionEvent:
     visit_number: int = 1
     start_frame: int = 0
     end_frame: Optional[int] = None
+    gaze_origin: Optional[Tuple[int, int]] = None
+    gaze_direction: Optional[Tuple[float, float]] = None
 
     def close(self, end_time: float, end_frame: int, status: str = "completed") -> None:
         """Close this attention event."""
@@ -65,6 +67,8 @@ class AttentionEvent:
             "visit_number": self.visit_number,
             "start_frame": self.start_frame,
             "end_frame": self.end_frame,
+            "gaze_origin": list(self.gaze_origin) if self.gaze_origin else None,
+            "gaze_direction": list(self.gaze_direction) if self.gaze_direction else None,
         }
 
 
@@ -151,6 +155,8 @@ class AttentionTracker:
         confidence: float,
         zone_id: str,
         state: AttentionState,
+        gaze_origin: Optional[Tuple[int, int]] = None,
+        gaze_direction: Optional[Tuple[float, float]] = None,
     ) -> None:
         """
         Update attention tracking for a shopper.
@@ -180,6 +186,11 @@ class AttentionTracker:
                     ts.confidence_sum / ts.confidence_count, 4
                 )
                 ts.active_event.attention_direction = direction.value
+                # Update spatial data with latest observation
+                if gaze_origin:
+                    ts.active_event.gaze_origin = gaze_origin
+                if gaze_direction:
+                    ts.active_event.gaze_direction = gaze_direction
                 return
             else:
                 # Different target → close current, start new
@@ -200,6 +211,8 @@ class AttentionTracker:
             confidence=confidence,
             visit_number=ts.visit_counts[visit_key],
             start_frame=frame,
+            gaze_origin=gaze_origin,
+            gaze_direction=gaze_direction,
         )
         ts.confidence_sum = confidence
         ts.confidence_count = 1

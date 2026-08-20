@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import uuid
 
+# pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
 from app.models.ai_job import AIJob
@@ -22,6 +24,7 @@ from app.models.product import Product
 from app.models.shelf import Shelf
 from app.models.store import Store
 from app.module4.engine import Module4AttentionEngine
+from app.module4.report_generator import Module4ReportGenerator
 from app.schemas.module4 import (
     AttentionEventItem,
     Module4AnalysisResponse,
@@ -121,18 +124,14 @@ def get_or_run_module4_analysis(
         except Exception:
             pass
 
-    # Ensure DB shelves are represented
-    existing_region_ids = {r.get("id") for r in shelf_regions}
-    for idx, s in enumerate(db_shelves):
-        s_code = s.shelf_code or f"shelf_{idx+1}"
-        if s_code not in existing_region_ids and str(s.id) not in existing_region_ids:
-            shelf_regions.append({
-                "id": str(s.id),
-                "name": s.name,
-                "type": "shelf",
-                "shelf_code": s.shelf_code,
-                "polygon": [[100, 100], [500, 100], [500, 400], [100, 400]], # fallback bounding area
-            })
+    # Enrich configured regions with DB shelf metadata if available
+    for s in db_shelves:
+        for r in shelf_regions:
+            if (s.shelf_code and s.shelf_code == r.get("id")) or (s.name and s.name.lower() == r.get("name", "").lower()):
+                r["shelf_code"] = s.shelf_code
+                r["db_id"] = str(s.id)
+                if s.zone:
+                    r["zone_id"] = s.zone.zone_code or str(s.zone.id)
 
     # 2. Fetch products for store
     db_products = db.query(Product).filter(Product.store_id == job.store_id).all()
@@ -168,9 +167,8 @@ def get_or_run_module4_analysis(
         products_raw = [p.to_dict() for p in engine.product_detector.get_unconfigured_placeholder(product_list)]
 
     # 4. Persist or update in database
-    if existing_analysis:
-        analysis_record = existing_analysis
-    else:
+    analysis_record = db.query(AttentionAnalysis).filter(AttentionAnalysis.job_id == job.id).first()
+    if not analysis_record:
         analysis_record = AttentionAnalysis(
             id=uuid.uuid4(),
             job_id=job.id,
@@ -188,14 +186,14 @@ def get_or_run_module4_analysis(
     analysis_record.quality_metrics = quality_raw
     analysis_record.summary_data = summary_raw
 
-    # Clear old events if rerun
-    if existing_analysis:
+    # Clear old events if updating
+    if analysis_record.id:
         db.query(AttentionEventModel).filter(AttentionEventModel.analysis_id == analysis_record.id).delete()
 
     # Persist individual event records (up to 500 events)
     events_sample = report_dict.get("events_sample", [])
-    for ev in events_sample:
-        event_entry = AttentionEventModel(
+    events_to_add = [
+        AttentionEventModel(
             id=uuid.uuid4(),
             analysis_id=analysis_record.id,
             job_id=job.id,
@@ -212,10 +210,29 @@ def get_or_run_module4_analysis(
             confidence=float(ev.get("confidence", 0.0)),
             visit_number=int(ev.get("visit_number", 1)),
         )
-        db.add(event_entry)
+        for ev in events_sample
+    ]
+    if events_to_add:
+        db.add_all(events_to_add)
 
-    db.commit()
-    db.refresh(analysis_record)
+    try:
+        db.commit()
+        db.refresh(analysis_record)
+    except Exception:
+        db.rollback()
+        # Concurrently created by another worker/thread - re-fetch and update
+        analysis_record = db.query(AttentionAnalysis).filter(AttentionAnalysis.job_id == job.id).first()
+        if analysis_record:
+            analysis_record.total_events = summary_raw.get("total_attention_events", 0)
+            analysis_record.total_attention_duration_sec = summary_raw.get("total_attention_duration_sec", 0.0)
+            analysis_record.average_attention_duration_sec = summary_raw.get("average_attention_duration_sec", 0.0)
+            analysis_record.shelf_engagement_score_avg = summary_raw.get("shelf_engagement_score_avg", 0.0)
+            analysis_record.shelf_metrics = shelves_raw
+            analysis_record.product_metrics = [p if isinstance(p, dict) else p.to_dict() for p in products_raw]
+            analysis_record.quality_metrics = quality_raw
+            analysis_record.summary_data = summary_raw
+            db.commit()
+            db.refresh(analysis_record)
 
     summary_schema = Module4SummarySchema(**summary_raw)
     shelves_schema = [ShelfMetricItem(**s) for s in shelves_raw]
@@ -310,7 +327,7 @@ def get_module4_report(db: Session, job_id: uuid.UUID) -> Module4ReportResponse:
     job = db.query(AIJob).filter(AIJob.id == job_id).first()
 
     project_root = _get_project_root()
-    output_dir = (project_root / job.output_path).resolve() if job.output_path else None
+    output_dir = (project_root / job.output_path).resolve() if (job and job.output_path) else None
     md_file = output_dir / "module4" / "module4_attention_report.md" if output_dir else None
     json_file = output_dir / "module4" / "module4_attention_report.json" if output_dir else None
 
@@ -318,20 +335,42 @@ def get_module4_report(db: Session, job_id: uuid.UUID) -> Module4ReportResponse:
     json_content: Dict[str, Any] = {}
 
     if md_file and md_file.exists():
-        with open(md_file, "r", encoding="utf-8") as f:
-            md_content = f.read()
+        try:
+            with open(md_file, "r", encoding="utf-8") as f:
+                md_content = f.read()
+        except Exception:
+            pass
 
     if json_file and json_file.exists():
-        with open(json_file, "r", encoding="utf-8") as f:
-            json_content = json.load(f)
-    else:
-        json_content = analysis.dict()
+        try:
+            with open(json_file, "r", encoding="utf-8") as f:
+                json_content = json.load(f)
+        except Exception:
+            pass
+    
+    if not json_content:
+        json_content = analysis.model_dump() if hasattr(analysis, "model_dump") else analysis.dict()
+
+    # Generate markdown report dynamically if file was missing or empty
+    if not md_content or not md_content.strip():
+        report_gen = Module4ReportGenerator()
+        md_content = report_gen.generate_markdown_report(json_content)
+        # Attempt to save to disk for future requests if output directory is available
+        if output_dir and output_dir.exists():
+            try:
+                m4_dir = output_dir / "module4"
+                m4_dir.mkdir(parents=True, exist_ok=True)
+                with open(m4_dir / "module4_attention_report.md", "w", encoding="utf-8") as f:
+                    f.write(md_content)
+            except Exception:
+                pass
 
     return Module4ReportResponse(
         job_id=job_id,
         json_report=json_content,
         markdown_report=md_content,
     )
+
 
 
 def get_module4_heatmap(db: Session, job_id: uuid.UUID) -> Module4HeatmapResponse:

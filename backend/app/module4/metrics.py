@@ -62,14 +62,26 @@ def compute_shelf_metrics(
     for s in configured_shelves:
         s_id = str(s.get("id") or s.get("shelf_id") or "")
         s_name = str(s.get("name") or s.get("shelf_name") or "Unknown Shelf")
+        s_zone = str(s.get("zone_id") or "")
         if s_id:
+            # Resolve dwell time and visitors: try direct match, s_zone, or shelf_X -> zone_X
+            resolved_dwell = dwell_map.get(s_id)
+            resolved_visitors = visitor_map.get(s_id)
+            if resolved_dwell is None and s_zone:
+                resolved_dwell = dwell_map.get(s_zone)
+                resolved_visitors = visitor_map.get(s_zone)
+            if resolved_dwell is None and s_id.startswith("shelf_"):
+                alt_zone = s_id.replace("shelf_", "zone_")
+                resolved_dwell = dwell_map.get(alt_zone)
+                resolved_visitors = visitor_map.get(alt_zone)
+
             shelf_records[s_id] = ShelfEngagement(
                 shelf_id=s_id,
                 shelf_name=s_name,
                 store_id=store_id,
                 camera_id=camera_id,
-                visitors=visitor_map.get(s_id, 0),
-                dwell_time_sec=dwell_map.get(s_id, 0.0),
+                visitors=resolved_visitors or 0,
+                dwell_time_sec=resolved_dwell or 0.0,
             )
 
     # Accumulate from attention events
@@ -85,9 +97,17 @@ def compute_shelf_metrics(
                     shelf_name=ev.target_name,
                     store_id=store_id,
                     camera_id=camera_id,
+                    visitors=visitor_map.get(ev.zone_id, 0),
+                    dwell_time_sec=dwell_map.get(ev.zone_id, 0.0),
                 )
 
             rec = shelf_records[s_id]
+            # If dwell_time_sec is still 0 and event has a valid zone_id, correlate with zone dwell
+            if rec.dwell_time_sec == 0.0 and ev.zone_id in dwell_map:
+                rec.dwell_time_sec = dwell_map[ev.zone_id]
+                if rec.visitors == 0:
+                    rec.visitors = visitor_map.get(ev.zone_id, 0)
+
             dur = ev.duration_seconds or 0.0
             rec.shelf_attention_time_sec += dur
             rec.attention_event_count += 1

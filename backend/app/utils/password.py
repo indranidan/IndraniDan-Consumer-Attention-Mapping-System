@@ -5,6 +5,13 @@ Provides bcrypt-based password hashing and verification.
 Uses passlib's CryptContext for a clean, swappable interface.
 """
 
+import bcrypt
+
+# Fix passlib compatibility with bcrypt >= 4.1.0
+if not hasattr(bcrypt, "__about__"):
+    bcrypt.__about__ = type("about", (), {"__version__": getattr(bcrypt, "__version__", "4.0.1")})
+
+# pyrefly: ignore [missing-import]
 from passlib.context import CryptContext
 
 # ── CryptContext Configuration ────────────────────────────────

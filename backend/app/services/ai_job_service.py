@@ -20,6 +20,7 @@ from app.models.store import Store
 from app.models.user import User
 from app.schemas.ai_job import (
     AIJobCreate,
+    AIJobReportResponse,
     AIJobResponse,
     AIJobResultsResponse,
 )
@@ -330,10 +331,14 @@ def get_job_results(
 
     # Resolve output directory
     project_root = _get_project_root()
-    output_dir = project_root / job.output_path if job.output_path else None
+    output_dir = None
+    if job.output_path:
+        op = Path(job.output_path)
+        output_dir = op if op.is_absolute() else (project_root / op)
 
     # Read Phase 6 report for detailed results
     reports = None
+    markdown_report = None
     available_files = []
     annotated_video = False
 
@@ -344,10 +349,37 @@ def get_job_results(
             json_files = list(report_dir.glob("*.json"))
             if json_files:
                 try:
-                    with open(json_files[0], "r") as f:
+                    with open(json_files[0], "r", encoding="utf-8") as f:
                         reports = json.load(f)
                 except Exception:
                     pass
+
+            md_files = list(report_dir.glob("*.md"))
+            if md_files:
+                try:
+                    with open(md_files[0], "r", encoding="utf-8") as f:
+                        markdown_report = f.read()
+                except Exception:
+                    pass
+
+        # Also fallback check phase5 reports if phase6 reports are absent
+        if not reports:
+            p5_report_dir = output_dir / "phase5" / "reports"
+            if p5_report_dir.exists():
+                p5_json_files = list(p5_report_dir.glob("*.json"))
+                if p5_json_files:
+                    try:
+                        with open(p5_json_files[0], "r", encoding="utf-8") as f:
+                            reports = json.load(f)
+                    except Exception:
+                        pass
+                p5_md_files = list(p5_report_dir.glob("*.md"))
+                if not markdown_report and p5_md_files:
+                    try:
+                        with open(p5_md_files[0], "r", encoding="utf-8") as f:
+                            markdown_report = f.read()
+                    except Exception:
+                        pass
 
         # List available files
         for phase_dir in sorted(output_dir.iterdir()):
@@ -362,16 +394,63 @@ def get_job_results(
                                 if sub_dir.name == "videos" and f.suffix in (".mp4", ".avi", ".mkv"):
                                     annotated_video = True
 
+    # Fallback to extract summary from reports if job.summary in DB is empty
+    summary = job.summary
+    if (not summary or not isinstance(summary, dict) or not summary.get("unique_shoppers")) and reports:
+        from app.services.ai_worker import _extract_summary
+        extracted = _extract_summary(reports)
+        if extracted:
+            summary = extracted
+
     return AIJobResultsResponse(
         job_id=job.id,
         camera_id=job.camera_id,
         store_id=job.store_id,
         status=job.status,
-        summary=job.summary,
+        summary=summary,
         reports=reports,
+        markdown_report=markdown_report,
         available_files=available_files,
         annotated_video_available=annotated_video,
     )
+
+
+def get_job_report(
+    db: Session,
+    job_id: uuid.UUID,
+) -> AIJobReportResponse:
+    """
+    Retrieve full structured JSON and Markdown reports for a completed Module 3 AI job.
+    """
+    results = get_job_results(db, job_id)
+    json_report = results.reports or {"summary": results.summary or {}}
+    markdown_report = results.markdown_report or ""
+
+    if not markdown_report and results.summary:
+        # Fallback generate clean Markdown summary if .md file is not on disk
+        lines = [
+            "# Module 3 — Consumer Tracking & Movement Analytics Report",
+            "",
+            "> **Phase 6: Executive Analytics Summary**",
+            "",
+            "## Summary Metrics",
+            "",
+            "| Metric | Value |",
+            "| :--- | :--- |",
+        ]
+        for k, v in results.summary.items():
+            if isinstance(v, dict):
+                lines.append(f"| **{k.replace('_', ' ').title()}** | {v.get('zone_name') or v.get('target_name') or json.dumps(v)} |")
+            else:
+                lines.append(f"| **{k.replace('_', ' ').title()}** | {v} |")
+        markdown_report = "\n".join(lines)
+
+    return AIJobReportResponse(
+        job_id=job_id,
+        json_report=json_report,
+        markdown_report=markdown_report,
+    )
+
 
 
 def get_job_output_file(

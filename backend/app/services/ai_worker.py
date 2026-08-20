@@ -210,6 +210,9 @@ def run_pipeline(
     env["PYTHONUTF8"] = "1"
 
     # Redirect all phase outputs to job-specific directory
+    env["AI_JOB_OUTPUT_PATH"] = str(job_output_dir)
+    env["PHASE1_OUTPUT_PATH"] = str(job_output_dir / "phase1" / "reports")
+    env["PHASE2_OUTPUT_PATH"] = str(job_output_dir / "phase2" / "reports")
     env["MOVEMENT_OUTPUT_PATH"] = str(job_output_dir / "phase3")
     env["PHASE3_OUTPUT_PATH"] = str(job_output_dir / "phase3" / "reports")
     env["PHASE4_OUTPUT_PATH"] = str(job_output_dir / "phase4" / "reports")

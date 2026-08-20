@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 
 
@@ -79,5 +80,15 @@ class AIJobResultsResponse(BaseModel):
     status: str
     summary: dict[str, Any] | None
     reports: dict[str, Any] | None = None
+    markdown_report: str | None = None
     available_files: list[str] = []
     annotated_video_available: bool = False
+
+
+class AIJobReportResponse(BaseModel):
+    """Structured report response for an AI job."""
+
+    job_id: uuid.UUID
+    json_report: dict[str, Any]
+    markdown_report: str
+

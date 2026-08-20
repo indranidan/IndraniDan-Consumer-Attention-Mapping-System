@@ -135,7 +135,8 @@ class Module4AttentionEngine:
             try:
                 with open(p4_file, "r", encoding="utf-8") as f:
                     p4_data = json.load(f)
-                    for z in p4_data.get("zones", []):
+                    zone_list = p4_data.get("zone_summaries") or p4_data.get("zones", [])
+                    for z in zone_list:
                         z_id = z.get("zone_id")
                         if z_id:
                             dwell = float(z.get("total_dwell_seconds", 0.0))
@@ -183,56 +184,88 @@ class Module4AttentionEngine:
             except Exception as exc:
                 self.logger.warning(f"Could not load Phase 5 attention events: {exc}")
 
-        # 2b. Backfill gaze_origin from Phase 2 tracks when Phase 5 events lack spatial coordinates
+        # 2b. Backfill gaze_origin & gaze_direction when Phase 5 events lack spatial coordinates
         events_missing_origin = [e for e in events if not e.gaze_origin]
         if events_missing_origin:
-            p2_tracks_file = job_output_dir / "phase2" / "reports" / "tracks.json"
-            if p2_tracks_file.exists():
+            direction_vectors = {
+                "LEFT": (-1.0, 0.0),
+                "RIGHT": (1.0, 0.0),
+                "UP": (0.0, -1.0),
+                "DOWN": (0.0, 1.0),
+                "CENTER": (0.0, 0.0),
+            }
+
+            # First attempt: Phase 2 tracks.json (job dir or global module3 dir)
+            p2_tracks_candidates = [
+                job_output_dir / "phase2" / "reports" / "tracks.json",
+                job_output_dir.parent.parent / "module3" / "phase2" / "reports" / "tracks.json",
+            ]
+            frame_track_map: Dict[int, Dict[int, dict]] = {}
+            for p2_path in p2_tracks_candidates:
+                if p2_path.exists():
+                    try:
+                        with open(p2_path, "r", encoding="utf-8") as f:
+                            p2_data = json.load(f)
+                        for frame_entry in p2_data.get("frames", []):
+                            frame_num = frame_entry.get("frame", 0)
+                            tracks_in_frame: Dict[int, dict] = {}
+                            for t in frame_entry.get("tracks", []):
+                                tracks_in_frame[t.get("track_id", -1)] = t
+                            frame_track_map[frame_num] = tracks_in_frame
+                        break
+                    except Exception as exc:
+                        self.logger.warning(f"Could not parse tracks.json from {p2_path}: {exc}")
+
+            # Second attempt: Phase 3 paths.json
+            p3_paths_file = job_output_dir / "phase3" / "reports" / "paths.json"
+            paths_data: Dict[str, list] = {}
+            if p3_paths_file.exists():
                 try:
-                    with open(p2_tracks_file, "r", encoding="utf-8") as f:
-                        p2_data = json.load(f)
-                    # Build frame -> {track_id: track_info} lookup
-                    frame_track_map: Dict[int, Dict[int, dict]] = {}
-                    for frame_entry in p2_data.get("frames", []):
-                        frame_num = frame_entry.get("frame", 0)
-                        tracks_in_frame: Dict[int, dict] = {}
-                        for t in frame_entry.get("tracks", []):
-                            tracks_in_frame[t.get("track_id", -1)] = t
-                        frame_track_map[frame_num] = tracks_in_frame
+                    with open(p3_paths_file, "r", encoding="utf-8") as f:
+                        raw_p3 = json.load(f)
+                        paths_data = raw_p3.get("paths", {})
+                except Exception:
+                    pass
 
-                    # Direction string to unit-vector mapping for gaze_direction
-                    direction_vectors = {
-                        "LEFT": (-1.0, 0.0),
-                        "RIGHT": (1.0, 0.0),
-                        "UP": (0.0, -1.0),
-                        "DOWN": (0.0, 1.0),
-                        "CENTER": (0.0, 0.0),
-                    }
+            for ev in events_missing_origin:
+                dir_str = (ev.attention_direction or "UNKNOWN").upper()
+                if not ev.gaze_direction:
+                    ev.gaze_direction = direction_vectors.get(dir_str, (0.0, 0.0))
 
-                    for ev in events_missing_origin:
-                        # Find the person's bbox at the event's start_frame
-                        frame_tracks = frame_track_map.get(ev.start_frame, {})
-                        track_info = frame_tracks.get(ev.track_id)
-                        if track_info:
-                            bbox = track_info.get("bbox")
-                            if bbox and len(bbox) == 4:
-                                x1, y1, x2, y2 = bbox
-                                # Use top-center of bbox as head/gaze origin
-                                head_x = int((x1 + x2) / 2)
-                                head_y = int(y1 + (y2 - y1) * 0.15)  # ~15% from top ≈ head level
-                                ev.gaze_origin = (head_x, head_y)
+                # Try tracks.json bbox
+                frame_tracks = frame_track_map.get(ev.start_frame, {})
+                track_info = frame_tracks.get(ev.track_id)
+                if track_info:
+                    bbox = track_info.get("bbox")
+                    if bbox and len(bbox) == 4:
+                        x1, y1, x2, y2 = bbox
+                        head_x = int((x1 + x2) / 2)
+                        head_y = int(y1 + (y2 - y1) * 0.15)
+                        ev.gaze_origin = (head_x, head_y)
+                        continue
 
-                                # Derive gaze_direction from attention_direction
-                                dir_str = (ev.attention_direction or "UNKNOWN").upper()
-                                ev.gaze_direction = direction_vectors.get(dir_str, (0.0, 0.0))
+                # Try paths.json for track_id nearest start_frame or timestamp
+                track_str_id = str(ev.track_id)
+                if track_str_id in paths_data and paths_data[track_str_id]:
+                    pts = paths_data[track_str_id]
+                    # Find closest point by frame
+                    closest_pt = min(pts, key=lambda p: abs(p.get("frame", 0) - ev.start_frame))
+                    px = int(closest_pt.get("x", 0))
+                    py = int(closest_pt.get("y", 0))
+                    if px > 0 or py > 0:
+                        ev.gaze_origin = (px, py)
+                        continue
 
-                    backfilled = sum(1 for e in events_missing_origin if e.gaze_origin)
-                    self.logger.info(
-                        f"Backfilled gaze_origin for {backfilled}/{len(events_missing_origin)} "
-                        f"events from Phase 2 tracking data"
-                    )
-                except Exception as exc:
-                    self.logger.warning(f"Could not backfill gaze_origin from Phase 2 tracks: {exc}")
+                # Try target region center if target is known
+                if ev.target_id and ev.target_id in self.shelf_analyzer.regions:
+                    target_reg = self.shelf_analyzer.regions[ev.target_id]
+                    ev.gaze_origin = target_reg.center
+
+            backfilled = sum(1 for e in events_missing_origin if e.gaze_origin)
+            self.logger.info(
+                f"Backfilled gaze_origin for {backfilled}/{len(events_missing_origin)} "
+                f"events from tracking/path/target spatial data"
+            )
 
         # 3. Compute shelf engagement metrics
         shelves_config = shelf_regions or [
