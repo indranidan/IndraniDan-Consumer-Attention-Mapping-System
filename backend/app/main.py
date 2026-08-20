@@ -34,14 +34,14 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     """Application startup and shutdown events."""
     # Startup
-    print("🚀 Consumer Attention Mapping System — Backend Starting...")
-    print(f"📡 CORS Origins: {settings.cors_origins_list}")
-    print(f"🔐 JWT Expiry: {settings.ACCESS_TOKEN_EXPIRE_MINUTES} minutes")
-    google_status = "✅ Configured" if settings.GOOGLE_CLIENT_ID else "⚠️  Not configured"
-    print(f"🌐 Google OAuth: {google_status}")
+    print("[INFO] Consumer Attention Mapping System -- Backend Starting...")
+    print(f"[INFO] CORS Origins: {settings.cors_origins_list}")
+    print(f"[INFO] JWT Expiry: {settings.ACCESS_TOKEN_EXPIRE_MINUTES} minutes")
+    google_status = "Configured" if settings.GOOGLE_CLIENT_ID else "Not configured"
+    print(f"[INFO] Google OAuth: {google_status}")
     yield
     # Shutdown
-    print("👋 Backend shutting down...")
+    print("[INFO] Backend shutting down...")
 
 
 # ── Application Instance ─────────────────────────────────────

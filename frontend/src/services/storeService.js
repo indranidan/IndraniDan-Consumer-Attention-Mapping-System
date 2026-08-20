@@ -98,8 +98,15 @@ export const stopAIJob = (jobId) => api.post(`/api/ai/jobs/${jobId}/stop`);
 export const getAIJobResults = (jobId) =>
   api.get(`/api/ai/jobs/${jobId}/results`);
 
-export const getAIFileUrl = (jobId, filePath) =>
-  `${api.defaults.baseURL}/api/ai/results/${jobId}/files/${filePath}`;
+export const getAIJobReport = (jobId) =>
+  api.get(`/api/ai/jobs/${jobId}/report`);
+
+export const getAIFileUrl = (jobId, filePath) => {
+  const token = localStorage.getItem("access_token");
+  const base = `${api.defaults.baseURL}/api/ai/results/${jobId}/files/${filePath}`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+};
+
 
 // ── Module 4: Attention Analysis Engine ───────────────────────
 export const getModule4Analysis = (jobId) =>

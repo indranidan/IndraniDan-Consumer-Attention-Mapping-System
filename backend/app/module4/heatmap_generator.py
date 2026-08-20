@@ -8,7 +8,9 @@ Does not mix coordinates across different cameras.
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# pyrefly: ignore [missing-import]
 import cv2
+# pyrefly: ignore [missing-import]
 import numpy as np
 
 from app.module4.models import AttentionEventRecord
@@ -35,8 +37,11 @@ class Module4HeatmapGenerator:
 
         density_points = []
         for ev in events:
+            gx, gy = None, None
             if ev.gaze_origin:
                 gx, gy = ev.gaze_origin
+            
+            if gx is not None and gy is not None:
                 # If direction is available, project point along direction
                 if ev.gaze_direction:
                     dx, dy = ev.gaze_direction
@@ -81,10 +86,14 @@ class Module4HeatmapGenerator:
 
         heat_matrix = np.zeros((h, w), dtype=np.float32)
         radius = 40
+        points_added = 0
 
         for ev in events:
+            gx, gy = None, None
             if ev.gaze_origin:
                 gx, gy = ev.gaze_origin
+
+            if gx is not None and gy is not None:
                 if ev.gaze_direction:
                     dx, dy = ev.gaze_direction
                     px = int(np.clip(gx + dx * 80, 0, w - 1))
@@ -95,6 +104,10 @@ class Module4HeatmapGenerator:
 
                 dur = float(ev.duration_seconds or 1.0)
                 cv2.circle(heat_matrix, (px, py), radius, dur, -1)
+                points_added += 1
+
+        if points_added == 0:
+            return None
 
         # Apply Gaussian Blur
         heat_matrix = cv2.GaussianBlur(heat_matrix, (0, 0), sigmaX=25, sigmaY=25)

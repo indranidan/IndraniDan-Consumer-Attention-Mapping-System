@@ -255,6 +255,20 @@ class ZoneManager:
         result = cv2.pointPolygonTest(zone_def.contour, (float(x), float(y)), False)
         return result >= 0
 
+    def point_in_zone(
+        self, x: int, y: int, zone: str | ZoneDefinition
+    ) -> bool:
+        """
+        Test whether a point is inside a specific zone by ID or definition.
+        """
+        if isinstance(zone, str):
+            zone_def = self.zones.get(zone)
+            if not zone_def:
+                return False
+        else:
+            zone_def = zone
+        return self.point_in_polygon(x, y, zone_def)
+
     def get_zones_for_point(self, x: int, y: int) -> List[str]:
         """
         Find all zones that contain the given point.

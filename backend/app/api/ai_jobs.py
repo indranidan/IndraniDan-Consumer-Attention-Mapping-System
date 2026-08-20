@@ -15,22 +15,28 @@ Endpoints:
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
+# pyrefly: ignore [missing-import]
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Response, UploadFile, status
+# pyrefly: ignore [missing-import]
 from fastapi.responses import FileResponse
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.models.user import User
 from app.schemas.ai_job import (
     AIJobCreate,
+    AIJobReportResponse,
     AIJobResponse,
     AIJobResultsResponse,
 )
 from app.schemas.auth import MessageResponse
 from app.core.dependencies import admin_or_store_manager, any_role
+from app.utils.token import decode_access_token
 from app.services import ai_job_service
 
 router = APIRouter(prefix="/api/ai", tags=["AI Analytics"])
+
 
 
 @router.post(
@@ -152,6 +158,24 @@ def get_ai_job_results(
 
 
 @router.get(
+    "/jobs/{job_id}/report",
+    response_model=AIJobReportResponse,
+    summary="Get Module 3 structured report",
+    responses={404: {"description": "Job not found"}},
+)
+def get_ai_job_report(
+    job_id: uuid.UUID,
+    current_user: User = Depends(any_role),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve full JSON and Markdown report for Module 3 AI job.
+    """
+    return ai_job_service.get_job_report(db, job_id)
+
+
+
+@router.get(
     "/results/{job_id}/files/{file_path:path}",
     summary="Serve job output file",
     responses={
@@ -162,14 +186,35 @@ def get_ai_job_results(
 def serve_ai_output_file(
     job_id: uuid.UUID,
     file_path: str,
-    current_user: User = Depends(any_role),
+    token: str | None = Query(default=None, description="Auth token for direct browser media/file requests"),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     """
     Serve a specific output file from a completed AI job.
     Supports videos, images, JSON reports, and markdown files.
-    Path traversal is prevented.
+    Path traversal is prevented. Supports Authorization header or ?token= query param.
     """
+    raw_token = token
+    if not raw_token and authorization and authorization.startswith("Bearer "):
+        raw_token = authorization.split(" ", 1)[1]
+
+    if not raw_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = decode_access_token(raw_token)
+    user_id_str = payload.get("user_id")
+    if not user_id_str:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     resolved_path = ai_job_service.get_job_output_file(db, job_id, file_path)
 
     # Determine media type

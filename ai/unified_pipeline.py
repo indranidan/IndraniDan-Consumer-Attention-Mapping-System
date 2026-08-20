@@ -385,6 +385,42 @@ class UnifiedPipelineProcessor:
                     cur_t_type = last_target_type.get(tid)
 
                     zone_id = current_zone_ids[0] if current_zone_ids else "unknown"
+
+                    # Compute spatial gaze coordinates for attention events
+                    cur_gaze_origin = None
+                    cur_gaze_direction = None
+                    cur_pose_data = last_pose.get(tid)
+                    if cur_pose_data and cur_pose_data.face_detected:
+                        cur_gaze_origin = cur_pose_data.nose_point
+                        # Compute 2D direction vector from yaw/pitch
+                        import math
+                        yaw_rad = math.radians(cur_pose_data.yaw)
+                        pitch_rad = math.radians(-cur_pose_data.pitch)
+                        g_dx = math.sin(yaw_rad)
+                        g_dy = math.sin(pitch_rad)
+                        g_mag = math.sqrt(g_dx * g_dx + g_dy * g_dy)
+                        if g_mag > 1e-4:
+                            cur_gaze_direction = (round(g_dx / g_mag, 4), round(g_dy / g_mag, 4))
+                        else:
+                            cur_gaze_direction = (0.0, 0.0)
+                    elif not cur_gaze_origin:
+                        # Fallback: use top-center of person bbox as gaze origin
+                        x1, y1, x2, y2 = track.bbox
+                        cur_gaze_origin = (int((x1 + x2) / 2), int(y1 + (y2 - y1) * 0.15))
+
+                    # If person is outside all zones but looking at a known target,
+                    # try to infer zone from the target's region
+                    if zone_id == "unknown" and cur_t_id and cur_t_id != "unknown":
+                        # Check if any zone polygon contains the attention target center
+                        target_region = self.region_manager.get_region(cur_t_id)
+                        if target_region:
+                            for zone in self.zone_manager.get_all_zones():
+                                if self.zone_manager.point_in_zone(
+                                    target_region.center[0], target_region.center[1], zone.id
+                                ):
+                                    zone_id = zone.id
+                                    break
+
                     if self.config.attention_analysis_enabled:
                         self.attention_tracker.update(
                             track_id=tid,
@@ -397,6 +433,8 @@ class UnifiedPipelineProcessor:
                             confidence=cur_conf,
                             zone_id=zone_id,
                             state=cur_state,
+                            gaze_origin=cur_gaze_origin,
+                            gaze_direction=cur_gaze_direction,
                         )
 
                     # Draw per-track visual elements

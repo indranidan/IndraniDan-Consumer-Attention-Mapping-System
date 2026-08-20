@@ -98,11 +98,15 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
 
   // Report state
   const [markdownReport, setMarkdownReport] = useState("");
+  const [jsonReport, setJsonReport] = useState(null);
+  const [reportViewMode, setReportViewMode] = useState("markdown"); // "markdown" | "json"
   const [reportLoading, setReportLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Heatmap state
   const [heatmapInfo, setHeatmapInfo] = useState(null);
   const [heatmapBlobUrl, setHeatmapBlobUrl] = useState(null);
+  const [heatmapLoading, setHeatmapLoading] = useState(false);
 
   const fetchAnalysis = useCallback(async () => {
     if (!jobId) return;
@@ -142,15 +146,18 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
     try {
       const res = await getModule4Report(jobId);
       setMarkdownReport(res.data?.markdown_report || "");
+      setJsonReport(res.data?.json_report || null);
     } catch {
-      setMarkdownReport("Report not available.");
+      setMarkdownReport("");
     } finally {
       setReportLoading(false);
     }
   }, [jobId]);
 
+
   const fetchHeatmap = useCallback(async () => {
     if (!jobId) return;
+    setHeatmapLoading(true);
     try {
       const res = await getModule4Heatmap(jobId);
       setHeatmapInfo(res.data);
@@ -177,6 +184,8 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
     } catch {
       setHeatmapInfo(null);
       setHeatmapBlobUrl(null);
+    } finally {
+      setHeatmapLoading(false);
     }
   }, [jobId]);
 
@@ -626,7 +635,12 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
               )}
             </div>
 
-            {heatmapBlobUrl ? (
+            {heatmapLoading ? (
+              <div className="py-12 text-center">
+                <div className="w-6 h-6 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mx-auto mb-2" />
+                <p className="text-xs text-gray-500">Loading spatial attention heatmap...</p>
+              </div>
+            ) : heatmapBlobUrl ? (
               <div className="relative aspect-video max-w-2xl mx-auto bg-gray-950 rounded-xl overflow-hidden border border-gray-800">
                 <img
                   src={heatmapBlobUrl}
@@ -652,16 +666,196 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
 
       {/* ── TAB 5: Report & Details ───────────────────────────── */}
       {activeSubTab === "report" && (
-        <div className="bg-gray-900/60 border border-gray-800/60 rounded-2xl p-5">
-          {reportLoading ? (
-            <div className="p-8 text-center text-xs text-gray-500">Loading markdown report...</div>
-          ) : (
-            <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap max-h-[480px] overflow-y-auto leading-relaxed bg-gray-950/60 p-4 rounded-xl border border-gray-800">
-              {markdownReport}
-            </pre>
-          )}
+        <div className="space-y-4">
+          <div className="bg-gray-900/60 border border-gray-800/60 rounded-2xl p-5">
+            {/* Header controls */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-4 border-b border-gray-800">
+              <div>
+                <h4 className="text-sm font-semibold text-white">Module 4 Attention Analysis Report</h4>
+                <p className="text-xs text-gray-500">
+                  Detailed 3D head pose and shelf engagement analytics exportable in Markdown and JSON
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* View Mode Toggle */}
+                <div className="flex bg-gray-800 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setReportViewMode("markdown")}
+                    className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                      reportViewMode === "markdown"
+                        ? "bg-violet-600 text-white"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Markdown Report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportViewMode("json")}
+                    className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                      reportViewMode === "json"
+                        ? "bg-violet-600 text-white"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Raw JSON
+                  </button>
+                </div>
+
+                {/* Copy Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const content =
+                      reportViewMode === "markdown"
+                        ? markdownReport || generateModule4FallbackMarkdown(summary, shelves, products, quality)
+                        : JSON.stringify(jsonReport || data, null, 2);
+                    if (!content) return;
+                    navigator.clipboard.writeText(content);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium border border-gray-700 flex items-center gap-1.5 transition-all"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+
+                {/* Download Markdown */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const content = markdownReport || generateModule4FallbackMarkdown(summary, shelves, products, quality);
+                    const blob = new Blob([content], { type: "text/markdown" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `module4_attention_report_${jobId}.md`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-violet-600/30 hover:bg-violet-600/50 text-violet-200 text-xs font-medium border border-violet-500/30 flex items-center gap-1.5 transition-all"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download .md
+                </button>
+
+                {/* Download JSON */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const content = JSON.stringify(jsonReport || data, null, 2);
+                    const blob = new Blob([content], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `module4_attention_report_${jobId}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-medium border border-gray-700 flex items-center gap-1.5 transition-all"
+                >
+                  Download .json
+                </button>
+              </div>
+            </div>
+
+            {/* Content view */}
+            {reportLoading ? (
+              <div className="p-12 text-center text-xs text-gray-500">Loading formatted report...</div>
+            ) : reportViewMode === "markdown" ? (
+              <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap max-h-[500px] overflow-y-auto leading-relaxed bg-gray-950/70 p-4 rounded-xl border border-gray-800">
+                {markdownReport || generateModule4FallbackMarkdown(summary, shelves, products, quality)}
+              </pre>
+            ) : (
+              <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap max-h-[500px] overflow-y-auto leading-relaxed bg-gray-950/70 p-4 rounded-xl border border-gray-800">
+                {JSON.stringify(jsonReport || data, null, 2)}
+              </pre>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
+
+function generateModule4FallbackMarkdown(summary, shelves, products, quality) {
+  const lines = [
+    "# Module 4 — Consumer Attention Analysis Report",
+    "",
+    "> **Estimated Attention Analysis**: All metrics derived from 3D head orientation and proxy intersections.",
+    "",
+    "## 1. Executive Summary",
+    "",
+    "| Metric | Value |",
+    "| :--- | :--- |",
+    `| **Total Attention Events** | ${summary.total_attention_events ?? 0} |`,
+    `| **Total Attention Duration** | ${(summary.total_attention_duration_sec ?? 0).toFixed(2)}s |`,
+    `| **Average Event Duration** | ${(summary.average_attention_duration_sec ?? 0).toFixed(2)}s |`,
+    `| **Total Dwell Time** | ${(summary.total_dwell_time_sec ?? 0).toFixed(2)}s |`,
+    `| **Total Shelf Attention Time** | ${(summary.total_shelf_attention_time_sec ?? 0).toFixed(2)}s |`,
+    `| **Repeated Attention Events** | ${summary.total_repeated_attention_events ?? 0} |`,
+    `| **Unique Viewers** | ${summary.total_unique_viewers ?? 0} |`,
+    `| **Average Shelf Engagement Score** | ${(summary.shelf_engagement_score_avg ?? 0).toFixed(1)} / 100 |`,
+    "",
+    "## 2. Shelf Engagement Analysis",
+    "",
+    "| Shelf Name | Visitors | Viewers | Dwell Time | Attention Time | Avg Attention | Score |",
+    "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
+  ];
+
+  if (shelves && shelves.length > 0) {
+    shelves.forEach((s) => {
+      lines.push(
+        `| **${s.shelf_name || "—"}** | ${s.visitors ?? 0} | ${s.viewers ?? 0} | ${(s.dwell_time_sec ?? 0).toFixed(1)}s | ${(s.shelf_attention_time_sec ?? 0).toFixed(1)}s | ${(s.average_shelf_attention_sec ?? 0).toFixed(2)}s | **${(s.score ?? 0).toFixed(1)}** |`
+      );
+    });
+  } else {
+    lines.push("| *No shelf regions configured* | — | — | — | — | — | — |");
+  }
+
+  lines.push("", "## 3. Product Attention Analysis", "");
+  if (products && products.length > 0) {
+    lines.push(
+      "| Product Name | SKU | Viewers | Attention Events | Focus Duration | Avg Focus |",
+      "| :--- | :--- | :--- | :--- | :--- | :--- |"
+    );
+    products.forEach((p) => {
+      lines.push(
+        `| **${p.product_name || "—"}** | ${p.sku || "—"} | ${p.viewers ?? 0} | ${p.attention_events ?? 0} | ${(p.total_focus_duration_sec ?? 0).toFixed(1)}s | ${(p.average_focus_duration_sec ?? 0).toFixed(2)}s |`
+      );
+    });
+  } else {
+    lines.push(
+      "> [!WARNING]",
+      "> **Product Spatial Mapping Not Configured**: Pixel coordinates for individual products are not mapped."
+    );
+  }
+
+  if (quality) {
+    lines.push(
+      "",
+      "## 4. Detection Quality & Pose Confidence",
+      "",
+      "| Quality Metric | Value |",
+      "| :--- | :--- |",
+      `| **Total Frames Analyzed** | ${quality.total_frames_analyzed ?? 0} |`,
+      `| **Valid Face Detections** | ${quality.valid_face_detections ?? 0} |`,
+      `| **Face Detection Rate** | ${((quality.face_detection_rate ?? 0) * 100).toFixed(1)}% |`,
+      `| **Average Pose Confidence** | ${(quality.average_pose_confidence ?? 0).toFixed(2)} |`
+    );
+  }
+
+  return lines.join("\n");
+}
+

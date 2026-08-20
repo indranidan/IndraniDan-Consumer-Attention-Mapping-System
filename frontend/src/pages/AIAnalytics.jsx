@@ -18,6 +18,8 @@ import {
 import PageHeader from "../components/ui/PageHeader";
 import Modal from "../components/ui/Modal";
 import Module4AttentionAnalytics from "../components/module4/Module4AttentionAnalytics";
+import Module3TrackingAnalytics from "../components/module3/Module3TrackingAnalytics";
+
 
 const STATUS_COLORS = {
   QUEUED: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
@@ -348,8 +350,6 @@ export default function AIAnalytics() {
     const m = Math.floor(s / 60);
     return `${m}m ${s % 60}s`;
   };
-
-  const summary = resultsData?.summary;
 
   return (
     <div className="max-w-6xl mx-auto animate-fade-in">
@@ -820,170 +820,11 @@ export default function AIAnalytics() {
 
         {resultsTab === "module4" ? (
           <Module4AttentionAnalytics jobId={selectedJob?.id} job={selectedJob} />
-        ) : resultsLoading ? (
-          <div className="p-8 text-center">
-            <div className="w-8 h-8 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm text-gray-500">Loading results...</p>
-          </div>
-        ) : summary ? (
-          <div className="space-y-6">
-            {/* Summary Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              <MetricCard
-                label="Unique Shoppers"
-                value={summary.unique_shoppers}
-                gradient="from-violet-500 to-indigo-600"
-                icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                }
-              />
-              <MetricCard
-                label="Sessions"
-                value={summary.total_sessions}
-                gradient="from-emerald-500 to-teal-600"
-                icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                }
-              />
-              <MetricCard
-                label="Zone Visits"
-                value={summary.total_zone_visits}
-                gradient="from-amber-500 to-orange-600"
-                icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  </svg>
-                }
-              />
-              <MetricCard
-                label="Attention Events"
-                value={summary.total_attention_events}
-                gradient="from-pink-500 to-rose-600"
-                icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                }
-              />
-              <MetricCard
-                label="Avg Session Duration"
-                value={
-                  summary.average_session_duration_sec != null
-                    ? `${summary.average_session_duration_sec}s`
-                    : "—"
-                }
-                gradient="from-cyan-500 to-blue-600"
-                icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                }
-              />
-              <MetricCard
-                label="Avg Dwell Time"
-                value={
-                  summary.average_zone_dwell_time_sec != null
-                    ? `${summary.average_zone_dwell_time_sec}s`
-                    : "—"
-                }
-                gradient="from-purple-500 to-fuchsia-600"
-                icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                }
-              />
-              <MetricCard
-                label="Attention Targets"
-                value={summary.number_of_attention_targets}
-                gradient="from-lime-500 to-green-600"
-                icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                }
-              />
-              <MetricCard
-                label="Est. Attention Duration"
-                value={
-                  summary.total_estimated_attention_duration_sec != null
-                    ? `${summary.total_estimated_attention_duration_sec}s`
-                    : "—"
-                }
-                gradient="from-rose-500 to-red-600"
-                icon={
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                }
-              />
-            </div>
-
-            {/* Highlights */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {summary.most_visited_zone && (
-                <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/30">
-                  <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">
-                    Most Visited Zone
-                  </p>
-                  <p className="text-sm font-semibold text-white">
-                    {summary.most_visited_zone.zone_name}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {summary.most_visited_zone.total_visits} visits
-                  </p>
-                </div>
-              )}
-              {summary.most_attended_target && (
-                <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/30">
-                  <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">
-                    Most Attended Target
-                  </p>
-                  <p className="text-sm font-semibold text-white">
-                    {summary.most_attended_target.target_name}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {summary.most_attended_target.total_attention_sec}s
-                    estimated attention
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Available Files */}
-            {resultsData?.available_files?.length > 0 && (
-              <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/30">
-                <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2">
-                  Output Files ({resultsData.available_files.length})
-                </p>
-                <div className="max-h-40 overflow-y-auto space-y-1">
-                  {resultsData.available_files.map((f) => (
-                    <p key={f} className="text-xs text-gray-400 font-mono">
-                      {f}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <p className="text-[10px] text-gray-600 italic">
-              Note: All attention metrics are ESTIMATED based on head
-              orientation analysis, not precise eye tracking.
-            </p>
-          </div>
         ) : (
-          <div className="p-8 text-center">
-            <p className="text-sm text-gray-500">
-              No results available for this job.
-            </p>
-          </div>
+          <Module3TrackingAnalytics jobId={selectedJob?.id} job={selectedJob} resultsData={resultsData} />
         )}
       </Modal>
+
 
       {/* ── Error Modal ──────────────────────────────────── */}
       <Modal
