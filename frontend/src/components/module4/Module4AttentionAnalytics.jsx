@@ -18,6 +18,7 @@ import {
   getModule4Heatmap,
   runModule4Job,
 } from "../../services/storeService";
+import api from "../../services/api";
 
 function ScoreBadge({ score }) {
   let color = "text-gray-400 bg-gray-500/10 border-gray-500/20";
@@ -50,9 +51,8 @@ function DirectionBadge({ direction }) {
 
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border ${
-        map[direction] || map.UNKNOWN
-      }`}
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border ${map[direction] || map.UNKNOWN
+        }`}
     >
       {direction}
     </span>
@@ -102,6 +102,7 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
 
   // Heatmap state
   const [heatmapInfo, setHeatmapInfo] = useState(null);
+  const [heatmapBlobUrl, setHeatmapBlobUrl] = useState(null);
 
   const fetchAnalysis = useCallback(async () => {
     if (!jobId) return;
@@ -153,8 +154,29 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
     try {
       const res = await getModule4Heatmap(jobId);
       setHeatmapInfo(res.data);
+
+      // Fetch heatmap image with auth headers and create a blob URL for display
+      if (res.data?.image_url) {
+        try {
+          const imgUrl = `${api.defaults.baseURL}${res.data.image_url}`;
+          const token = localStorage.getItem("access_token");
+          const imgRes = await fetch(imgUrl, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (imgRes.ok) {
+            const blob = await imgRes.blob();
+            setHeatmapBlobUrl((prev) => {
+              if (prev) URL.revokeObjectURL(prev);
+              return URL.createObjectURL(blob);
+            });
+          }
+        } catch {
+          // Image fetch failed; heatmapBlobUrl stays null
+        }
+      }
     } catch {
       setHeatmapInfo(null);
+      setHeatmapBlobUrl(null);
     }
   }, [jobId]);
 
@@ -279,11 +301,10 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
             key={tab.id}
             type="button"
             onClick={() => setActiveSubTab(tab.id)}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
-              activeSubTab === tab.id
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${activeSubTab === tab.id
                 ? "bg-violet-600 text-white shadow-lg shadow-violet-600/20"
                 : "bg-gray-800/40 text-gray-400 hover:text-gray-200 hover:bg-gray-800/70"
-            }`}
+              }`}
           >
             <span>{tab.icon}</span>
             {tab.label}
@@ -480,11 +501,10 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span
-                            className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium border ${
-                              p.is_configured
+                            className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium border ${p.is_configured
                                 ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
                                 : "bg-gray-800 text-gray-400 border-gray-700"
-                            }`}
+                              }`}
                           >
                             {p.status_note}
                           </span>
@@ -606,16 +626,20 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
               )}
             </div>
 
-            {heatmapInfo?.image_url ? (
+            {heatmapBlobUrl ? (
               <div className="relative aspect-video max-w-2xl mx-auto bg-gray-950 rounded-xl overflow-hidden border border-gray-800">
                 <img
-                  src={heatmapInfo.image_url}
+                  src={heatmapBlobUrl}
                   alt="Attention Density Heatmap"
                   className="w-full h-full object-contain"
                   onError={(e) => {
                     e.target.style.display = "none";
                   }}
                 />
+              </div>
+            ) : heatmapInfo?.total_points === 0 ? (
+              <div className="py-12 text-center text-xs text-gray-500">
+                No attention gaze points were detected for heatmap rendering.
               </div>
             ) : (
               <div className="py-12 text-center text-xs text-gray-500">
