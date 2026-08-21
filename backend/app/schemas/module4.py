@@ -98,6 +98,8 @@ class Module4SummarySchema(BaseModel):
     most_attended_shelf: Optional[Dict[str, Any]] = None
     shelf_engagement_score_avg: float = 0.0
     product_mapping_configured: bool = False
+    config_hash: Optional[str] = None
+    analyzed_at: Optional[str] = None
     disclaimer: str = (
         "All attention metrics are ESTIMATED based on 3D head pose and orientation "
         "relative to configured regions. The system does not perform pixel-level eye gaze tracking."

@@ -129,60 +129,71 @@ class Module4AttentionEngine:
         zone_visitor_map: Dict[str, int] = {}
         total_dwell_sec = 0.0
 
-        p4_dir = job_output_dir / "phase4" / "reports"
-        p4_file = p4_dir / "zone_dwell_summary.json"
-        if p4_file.exists():
-            try:
-                with open(p4_file, "r", encoding="utf-8") as f:
-                    p4_data = json.load(f)
-                    zone_list = p4_data.get("zone_summaries") or p4_data.get("zones", [])
-                    for z in zone_list:
-                        z_id = z.get("zone_id")
-                        if z_id:
-                            dwell = float(z.get("total_dwell_seconds", 0.0))
-                            zone_dwell_map[z_id] = dwell
-                            zone_visitor_map[z_id] = int(z.get("unique_shoppers", 0))
-                            total_dwell_sec += dwell
-            except Exception as exc:
-                self.logger.warning(f"Could not load Phase 4 zone dwell summary: {exc}")
+        p4_candidates = [
+            job_output_dir / "phase4" / "reports" / "zone_dwell_summary.json",
+            job_output_dir / "phase4" / "zone_dwell_summary.json",
+            job_output_dir / "reports" / "zone_dwell_summary.json",
+        ]
+        for p4_file in p4_candidates:
+            if p4_file.exists():
+                try:
+                    with open(p4_file, "r", encoding="utf-8") as f:
+                        p4_data = json.load(f)
+                        zone_list = p4_data.get("zone_summaries") or p4_data.get("zones", [])
+                        for z in zone_list:
+                            z_id = z.get("zone_id")
+                            if z_id:
+                                dwell = float(z.get("total_dwell_seconds", 0.0))
+                                zone_dwell_map[z_id] = dwell
+                                zone_visitor_map[z_id] = int(z.get("unique_shoppers", 0))
+                                total_dwell_sec += dwell
+                    break
+                except Exception as exc:
+                    self.logger.warning(f"Could not load Phase 4 zone dwell summary from {p4_file}: {exc}")
 
         # 2. Read Phase 5 attention events
-        p5_events_file = job_output_dir / "phase5" / "reports" / "attention_events.json"
+        p5_candidates = [
+            job_output_dir / "phase5" / "reports" / "attention_events.json",
+            job_output_dir / "phase5" / "attention_events.json",
+            job_output_dir / "reports" / "attention_events.json",
+        ]
         events: List[AttentionEventRecord] = []
 
-        if p5_events_file.exists():
-            try:
-                with open(p5_events_file, "r", encoding="utf-8") as f:
-                    p5_data = json.load(f)
-                    raw_events = p5_data.get("events", [])
-                    for re in raw_events:
-                        ev = AttentionEventRecord(
-                            event_id=re.get("event_id") or str(re.get("tracking_id", "")) + "_" + str(re.get("start_time", "")),
-                            track_id=re.get("tracking_id", 0),
-                            session_id=re.get("session_id"),
-                            camera_id=camera_id,
-                            store_id=store_id,
-                            timestamp=re.get("start_time", 0.0),
-                            start_time=re.get("start_time", 0.0),
-                            end_time=re.get("end_time"),
-                            duration_seconds=re.get("duration_seconds"),
-                            attention_type=re.get("attention_type", "SHELF_ATTENTION"),
-                            target_type=re.get("target_type", "shelf"),
-                            target_id=re.get("target_id", "unknown"),
-                            target_name=re.get("target_name", "Unknown"),
-                            zone_id=re.get("zone_id", "unknown"),
-                            attention_direction=re.get("attention_direction", "UNKNOWN"),
-                            confidence=float(re.get("confidence", 0.0)),
-                            status=re.get("status", "completed"),
-                            visit_number=int(re.get("visit_number", 1)),
-                            start_frame=int(re.get("start_frame", 0)),
-                            end_frame=re.get("end_frame"),
-                            gaze_origin=tuple(re["gaze_origin"]) if "gaze_origin" in re and re["gaze_origin"] else None,
-                            gaze_direction=tuple(re["gaze_direction"]) if "gaze_direction" in re and re["gaze_direction"] else None,
-                        )
-                        events.append(ev)
-            except Exception as exc:
-                self.logger.warning(f"Could not load Phase 5 attention events: {exc}")
+        for p5_events_file in p5_candidates:
+            if p5_events_file.exists():
+                try:
+                    with open(p5_events_file, "r", encoding="utf-8") as f:
+                        p5_data = json.load(f)
+                        raw_events = p5_data.get("events", [])
+                        for re in raw_events:
+                            ev = AttentionEventRecord(
+                                event_id=re.get("event_id") or str(re.get("tracking_id", "")) + "_" + str(re.get("start_time", "")),
+                                track_id=re.get("tracking_id", 0),
+                                session_id=re.get("session_id"),
+                                camera_id=camera_id,
+                                store_id=store_id,
+                                timestamp=re.get("start_time", 0.0),
+                                start_time=re.get("start_time", 0.0),
+                                end_time=re.get("end_time"),
+                                duration_seconds=re.get("duration_seconds"),
+                                attention_type=re.get("attention_type", "SHELF_ATTENTION"),
+                                target_type=re.get("target_type", "shelf"),
+                                target_id=re.get("target_id", "unknown"),
+                                target_name=re.get("target_name", "Unknown"),
+                                zone_id=re.get("zone_id", "unknown"),
+                                attention_direction=re.get("attention_direction", "UNKNOWN"),
+                                confidence=float(re.get("confidence", 0.0)),
+                                status=re.get("status", "completed"),
+                                visit_number=int(re.get("visit_number", 1)),
+                                start_frame=int(re.get("start_frame", 0)),
+                                end_frame=re.get("end_frame"),
+                                gaze_origin=tuple(re["gaze_origin"]) if "gaze_origin" in re and re["gaze_origin"] else None,
+                                gaze_direction=tuple(re["gaze_direction"]) if "gaze_direction" in re and re["gaze_direction"] else None,
+                            )
+                            events.append(ev)
+                    break
+                except Exception as exc:
+                    self.logger.warning(f"Could not load Phase 5 attention events from {p5_events_file}: {exc}")
 
         # 2b. Backfill gaze_origin & gaze_direction when Phase 5 events lack spatial coordinates
         events_missing_origin = [e for e in events if not e.gaze_origin]
