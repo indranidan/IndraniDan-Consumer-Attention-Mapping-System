@@ -25,6 +25,7 @@ from app.api.cameras import router as cameras_router
 from app.api.dashboard import router as dashboard_router
 from app.api.ai_jobs import router as ai_jobs_router
 from app.api.module4 import router as module4_router
+from app.api.module5 import router as module5_router
 
 settings = get_settings()
 
@@ -52,11 +53,12 @@ app = FastAPI(
         "Module 2: Store & Shelf Management. "
         "Module 3: AI-Powered Consumer Tracking & Dwell Analysis. "
         "Module 4: Attention Analysis Engine (Gaze, Head Pose, Shelf & Product Engagement). "
+        "Module 5: Product Interaction Analysis Module (Viewed, Pickup, Return, Comparison, Shelf Interaction). "
         "Provides user registration, login, JWT auth, Google OAuth, "
         "role-based permissions, full retail store management, "
-        "and advanced shopper behavior & attention analytics."
+        "and advanced shopper behavior & product interaction analytics."
     ),
-    version="4.0.0",
+    version="5.0.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -100,6 +102,9 @@ app.include_router(ai_jobs_router)
 # Module 4: Attention Analysis Engine
 app.include_router(module4_router)
 
+# Module 5: Product Interaction Analysis Module
+app.include_router(module5_router)
+
 
 # ── Health Check ──────────────────────────────────────────────
 @app.get(
@@ -117,8 +122,9 @@ def health_check():
             "Store & Shelf Management",
             "AI Consumer Tracking & Dwell Analysis",
             "Attention Analysis Engine",
+            "Product Interaction Analysis Module",
         ],
-        "version": "4.0.0",
+        "version": "5.0.0",
     }
 
 

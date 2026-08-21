@@ -237,7 +237,7 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
           disabled={refreshing}
           className="px-4 py-2 rounded-xl text-xs font-medium text-white bg-violet-600 hover:bg-violet-500 transition-all shadow-lg"
         >
-          {refreshing ? "Computing..." : "Run Module 4 Engine"}
+          {refreshing ? "Computing..." : "Re-evaluate"}
         </button>
       </div>
     );
@@ -293,7 +293,7 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           )}
-          Refresh Engine
+          Re-evaluate
         </button>
       </div>
 

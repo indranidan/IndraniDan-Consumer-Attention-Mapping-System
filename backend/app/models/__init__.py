@@ -14,6 +14,10 @@ from app.models.product import Product
 from app.models.camera import Camera
 from app.models.ai_job import AIJob
 from app.models.attention import AttentionAnalysis, AttentionEventModel
+from app.models.product_interaction import (
+    ProductInteractionAnalysis,
+    ProductInteractionEventModel,
+)
 
 __all__ = [
     "Role",
@@ -26,5 +30,7 @@ __all__ = [
     "AIJob",
     "AttentionAnalysis",
     "AttentionEventModel",
+    "ProductInteractionAnalysis",
+    "ProductInteractionEventModel",
 ]
 

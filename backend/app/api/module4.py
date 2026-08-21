@@ -38,9 +38,9 @@ router = APIRouter(prefix="/api/module4", tags=["Module 4 — Attention Analysis
 @router.get(
     "/jobs/{job_id}/attention-analysis",
     response_model=Module4AnalysisResponse,
-    summary="Get full Module 4 attention analysis results",
+    summary="Get full Module 4 attention analysis results (read-only)",
     responses={
-        404: {"description": "Job not found or output directory missing"},
+        404: {"description": "Job not found or analysis not generated yet"},
         400: {"description": "Job is not completed yet"},
     },
 )
@@ -50,10 +50,10 @@ def get_attention_analysis(
     db: Session = Depends(get_db),
 ):
     """
-    Retrieve full Module 4 attention analysis results for a completed AI job.
-    Includes shelf engagement metrics, product focus data, and quality stats.
+    Retrieve existing Module 4 attention analysis results for a completed AI job.
+    Pure read-only operation; does NOT trigger analysis engine execution.
     """
-    return module4_service.get_or_run_module4_analysis(db, job_id)
+    return module4_service.get_module4_analysis(db, job_id)
 
 
 @router.get(
@@ -152,5 +152,5 @@ def run_module4_analysis(
     current_user: User = Depends(admin_or_store_manager),
     db: Session = Depends(get_db),
 ):
-    """Force re-run of Module 4 Attention Engine on an existing completed Module 3 job."""
-    return module4_service.get_or_run_module4_analysis(db, job_id, force_rerun=True)
+    """Explicitly trigger or re-evaluate Module 4 Attention Engine on an existing completed Module 3 job."""
+    return module4_service.run_module4_analysis(db, job_id, force_rerun=True)

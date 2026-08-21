@@ -131,3 +131,27 @@ export const runModule4Job = (jobId) =>
   api.post(`/api/module4/jobs/${jobId}/run`);
 
 
+// ── Module 5: Product Interaction Analysis ────────────────────
+export const getModule5Analysis = (jobId) =>
+  api.get(`/api/module5/jobs/${jobId}/interaction-analysis`);
+
+export const getModule5ProductEngagement = (jobId) =>
+  api.get(`/api/module5/jobs/${jobId}/product-engagement`);
+
+export const getModule5ShelfInteractions = (jobId) =>
+  api.get(`/api/module5/jobs/${jobId}/shelf-interactions`);
+
+export const getModule5Events = (jobId, params = {}) =>
+  api.get(`/api/module5/jobs/${jobId}/events`, { params });
+
+export const getModule5Comparisons = (jobId) =>
+  api.get(`/api/module5/jobs/${jobId}/comparisons`);
+
+export const getModule5Report = (jobId) =>
+  api.get(`/api/module5/jobs/${jobId}/report`);
+
+export const runModule5Job = (jobId) =>
+  api.post(`/api/module5/jobs/${jobId}/run`);
+
+
+

@@ -17,6 +17,7 @@ import {
 } from "../services/storeService";
 import PageHeader from "../components/ui/PageHeader";
 import Modal from "../components/ui/Modal";
+import Module5ProductInteraction from "../components/module5/Module5ProductInteraction";
 import Module4AttentionAnalytics from "../components/module4/Module4AttentionAnalytics";
 import Module3TrackingAnalytics from "../components/module3/Module3TrackingAnalytics";
 
@@ -106,7 +107,7 @@ export default function AIAnalytics() {
   const [resultsData, setResultsData] = useState(null);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
-  const [resultsTab, setResultsTab] = useState("module4"); // "module4" | "module3"
+  const [resultsTab, setResultsTab] = useState("module5"); // "module5" | "module4" | "module3"
 
 
   // Error modal
@@ -783,29 +784,41 @@ export default function AIAnalytics() {
         onClose={() => {
           setResultsModal(false);
           setResultsData(null);
-          setResultsTab("module4");
+          setResultsTab("module5");
         }}
         title={`Analytics Results — ${selectedJob?.camera_name || ""}`}
         maxWidth="max-w-5xl"
       >
         {/* Module Switcher Tabs */}
-        <div className="flex items-center gap-2 mb-6 border-b border-gray-800 pb-3">
+        <div className="flex items-center gap-2 mb-6 border-b border-gray-800 pb-3 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setResultsTab("module5")}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
+              resultsTab === "module5"
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
+                : "bg-gray-800/40 text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            Module 5 — Product Interaction Analysis
+          </button>
           <button
             type="button"
             onClick={() => setResultsTab("module4")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
               resultsTab === "module4"
                 ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
                 : "bg-gray-800/40 text-gray-400 hover:text-white hover:bg-gray-800"
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
             Module 4 — Attention Analysis Engine
           </button>
           <button
             type="button"
             onClick={() => setResultsTab("module3")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
               resultsTab === "module3"
                 ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
                 : "bg-gray-800/40 text-gray-400 hover:text-white hover:bg-gray-800"
@@ -818,9 +831,13 @@ export default function AIAnalytics() {
           </button>
         </div>
 
-        {resultsTab === "module4" ? (
+        {resultsTab === "module5" && (
+          <Module5ProductInteraction jobId={selectedJob?.id} job={selectedJob} />
+        )}
+        {resultsTab === "module4" && (
           <Module4AttentionAnalytics jobId={selectedJob?.id} job={selectedJob} />
-        ) : (
+        )}
+        {resultsTab === "module3" && (
           <Module3TrackingAnalytics jobId={selectedJob?.id} job={selectedJob} resultsData={resultsData} />
         )}
       </Modal>

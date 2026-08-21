@@ -331,6 +331,18 @@ def run_pipeline(
             except Exception as m4_exc:
                 _logger.warning(f"Could not auto-generate Module 4 analysis for job {job_id}: {m4_exc}")
 
+            # Automatically run Module 5 Product Interaction Analysis to persist aggregate analysis & reports
+            try:
+                from app.services.module5_service import get_or_run_module5_analysis
+                m5_db: Session = SessionLocal()
+                try:
+                    get_or_run_module5_analysis(m5_db, job_id)
+                    _logger.info(f"Module 5 Product Interaction Analysis completed and persisted for job {job_id}")
+                finally:
+                    m5_db.close()
+            except Exception as m5_exc:
+                _logger.warning(f"Could not auto-generate Module 5 analysis for job {job_id}: {m5_exc}")
+
         elif was_stopped or signal_stopped:
             _logger.info(f"Job {job_id} was stopped by user")
             _update_job_status(
