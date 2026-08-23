@@ -72,10 +72,13 @@ export default function Products() {
       if (search) params.search = search;
       Object.entries(filters).forEach(([key, val]) => { if (val !== "" && val !== null && val !== undefined) params[key] = val; });
       const [productsRes, storesRes] = await Promise.all([getProducts(params), getStores()]);
-      setProducts(productsRes.data);
-      setStores(storesRes.data);
-      const total = parseInt(productsRes.headers["x-total-count"] || productsRes.data.length, 10);
-      setTotalCount(total);
+      const productItems = Array.isArray(productsRes?.data) ? productsRes.data : (productsRes?.data?.items || []);
+      const storeItems = Array.isArray(storesRes?.data) ? storesRes.data : (storesRes?.data?.items || []);
+      setProducts(productItems);
+      setStores(storeItems);
+      const headerTotal = productsRes?.headers?.["x-total-count"] || productsRes?.headers?.["X-Total-Count"];
+      const total = headerTotal !== undefined && headerTotal !== null ? parseInt(headerTotal, 10) : productItems.length;
+      setTotalCount(isNaN(total) ? productItems.length : total);
     } catch {
       if (!products.length) {
         setProducts([]);

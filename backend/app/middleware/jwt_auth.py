@@ -22,7 +22,7 @@ from app.utils.token import decode_access_token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-async def get_current_user(
+def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -104,7 +104,7 @@ def require_roles(*allowed_roles: str) -> Callable:
             ...
     """
 
-    async def role_checker(
+    def role_checker(
         current_user: User = Depends(get_current_user),
     ) -> User:
         if current_user.role.role_name not in allowed_roles:

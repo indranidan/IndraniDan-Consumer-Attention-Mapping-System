@@ -26,6 +26,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
 from app.models.ai_job import AIJob
 from app.models.camera import Camera
 from app.models.store import Store

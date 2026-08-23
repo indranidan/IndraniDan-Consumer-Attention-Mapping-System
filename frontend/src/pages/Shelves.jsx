@@ -76,11 +76,15 @@ export default function Shelves() {
         getStores(),
         getZones(storeIdFilter ? { store_id: storeIdFilter } : {}),
       ]);
-      setShelves(shelvesRes.data);
-      setStores(storesRes.data);
-      setZones(allZonesRes.data);
-      const total = parseInt(shelvesRes.headers["x-total-count"] || shelvesRes.data.length, 10);
-      setTotalCount(total);
+      const shelfItems = Array.isArray(shelvesRes?.data) ? shelvesRes.data : (shelvesRes?.data?.items || []);
+      const storeItems = Array.isArray(storesRes?.data) ? storesRes.data : (storesRes?.data?.items || []);
+      const zoneItems = Array.isArray(allZonesRes?.data) ? allZonesRes.data : (allZonesRes?.data?.items || []);
+      setShelves(shelfItems);
+      setStores(storeItems);
+      setZones(zoneItems);
+      const headerTotal = shelvesRes?.headers?.["x-total-count"] || shelvesRes?.headers?.["X-Total-Count"];
+      const total = headerTotal !== undefined && headerTotal !== null ? parseInt(headerTotal, 10) : shelfItems.length;
+      setTotalCount(isNaN(total) ? shelfItems.length : total);
     } catch {
       if (!shelves.length) {
         setShelves([]);

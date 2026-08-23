@@ -28,12 +28,14 @@ export default function Dashboard() {
     Promise.allSettled([getDashboardStats(), getDashboardAnalytics()])
       .then(([statsRes, analyticsRes]) => {
         if (statsRes.status === "fulfilled" && statsRes.value?.data) {
-          setStats(statsRes.value.data);
+          const statsData = statsRes.value.data.data || statsRes.value.data;
+          setStats(statsData);
         } else if (!stats) {
           setStats({ stores: 0, zones: 0, shelves: 0, products: 0, cameras: 0 });
         }
         if (analyticsRes.status === "fulfilled" && analyticsRes.value?.data) {
-          setAnalytics(analyticsRes.value.data);
+          const analyticsData = analyticsRes.value.data.data || analyticsRes.value.data;
+          setAnalytics(analyticsData);
         }
       })
       .finally(() => setLoading(false));

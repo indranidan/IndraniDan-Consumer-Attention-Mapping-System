@@ -33,8 +33,18 @@ def project_root():
 
 @pytest.fixture
 def yolov8n_path(project_root):
-    """Return the path to the COCO-pretrained yolov8n.pt model."""
-    return project_root / "ai" / "yolov8n.pt"
+    """Return the path to the COCO-pretrained YOLO model."""
+    candidates = [
+        project_root / "ai" / "models" / "yolov8n.pt",
+        project_root / "ai" / "models" / "yolo26n.pt",
+        project_root / "ai" / "yolov8n.pt",
+        project_root / "ai" / "yolo26n.pt",
+        project_root / "ai" / "coco" / "yolov8n.pt",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 @pytest.fixture

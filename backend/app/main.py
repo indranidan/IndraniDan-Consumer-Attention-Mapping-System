@@ -43,6 +43,18 @@ from app.database.mongodb import connect_mongo, close_mongo, get_mongo_client
 # pyrefly: ignore [missing-import]
 from sqlalchemy import text
 
+# Ensure UTF-8 output encoding on Windows consoles
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 settings = get_settings()
 
 
@@ -63,23 +75,23 @@ async def lifespan(app: FastAPI):
             db_session.execute(text("ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS zone_config JSON;"))
             db_session.commit()
         db_target = settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else "Active"
-        print(f"[INFO] PostgreSQL: Connected ✅ ({db_target})")
+        print(f"[INFO] PostgreSQL: Connected [OK] ({db_target})")
     except Exception as exc:
-        print(f"[WARNING] PostgreSQL: Connection check failed ❌ ({exc})")
+        print(f"[WARNING] PostgreSQL: Connection check failed [FAIL] ({exc})")
 
     # MongoDB status check & connection
     mongo_client = await connect_mongo()
     if mongo_client:
-        print(f"[INFO] MongoDB: Connected ✅ (Database: {settings.MONGODB_DB_NAME})")
+        print(f"[INFO] MongoDB: Connected [OK] (Database: {settings.MONGODB_DB_NAME})")
     else:
-        print(f"[INFO] MongoDB: Fallback Mode ❌ (Local storage active)")
+        print(f"[INFO] MongoDB: Fallback Mode [LOCAL] (Local storage active)")
 
     # Google OAuth status check
     if settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET:
         cid_preview = settings.GOOGLE_CLIENT_ID[:12] + "..." if len(settings.GOOGLE_CLIENT_ID) > 15 else settings.GOOGLE_CLIENT_ID
-        print(f"[INFO] Google OAuth: Configured ✅ (Client ID: {cid_preview})")
+        print(f"[INFO] Google OAuth: Configured [OK] (Client ID: {cid_preview})")
     else:
-        print("[INFO] Google OAuth: Not configured ❌")
+        print("[INFO] Google OAuth: Not configured [DISABLED]")
 
     import asyncio
     from app.core.job_stream import job_stream_manager

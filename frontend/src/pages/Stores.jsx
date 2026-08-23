@@ -100,9 +100,11 @@ export default function Stores() {
         if (val) params[key] = val;
       });
       const res = await getStores(params);
-      setStores(res.data);
-      const total = parseInt(res.headers["x-total-count"] || res.data.length, 10);
-      setTotalCount(total);
+      const items = Array.isArray(res?.data) ? res.data : (res?.data?.items || []);
+      setStores(items);
+      const headerTotal = res?.headers?.["x-total-count"] || res?.headers?.["X-Total-Count"];
+      const total = headerTotal !== undefined && headerTotal !== null ? parseInt(headerTotal, 10) : items.length;
+      setTotalCount(isNaN(total) ? items.length : total);
     } catch {
       setStores([]);
       setTotalCount(0);

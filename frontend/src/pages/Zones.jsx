@@ -66,17 +66,21 @@ export default function Zones() {
       if (search) params.search = search;
       Object.entries(filters).forEach(([key, val]) => { if (val) params[key] = val; });
       const [zonesRes, storesRes] = await Promise.all([getZones(params), getStores()]);
-      setZones(zonesRes.data);
-      setStores(storesRes.data);
-      const total = parseInt(zonesRes.headers["x-total-count"] || zonesRes.data.length, 10);
-      setTotalCount(total);
+      const zoneItems = Array.isArray(zonesRes?.data) ? zonesRes.data : (zonesRes?.data?.items || []);
+      const storeItems = Array.isArray(storesRes?.data) ? storesRes.data : (storesRes?.data?.items || []);
+      setZones(zoneItems);
+      setStores(storeItems);
+      const headerTotal = zonesRes?.headers?.["x-total-count"] || zonesRes?.headers?.["X-Total-Count"];
+      const total = headerTotal !== undefined && headerTotal !== null ? parseInt(headerTotal, 10) : zoneItems.length;
+      setTotalCount(isNaN(total) ? zoneItems.length : total);
     } catch {
       if (!zones.length) {
         setZones([]);
         setTotalCount(0);
       }
+    } finally {
+      setLoading(false);
     }
-    finally { setLoading(false); }
   }, [search, storeIdFilter, filters, page, pageSize]);
 
 

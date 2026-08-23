@@ -7,7 +7,7 @@ Business logic for camera CRUD operations.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 
 from app.models.camera import Camera
@@ -109,7 +109,10 @@ def get_cameras(
     if page is not None and page_size is not None:
         query = query.offset((page - 1) * page_size).limit(page_size)
 
-    cameras = query.all()
+    cameras = query.options(
+        joinedload(Camera.store),
+        joinedload(Camera.zone),
+    ).all()
     return [_to_response(c) for c in cameras], total
 
 

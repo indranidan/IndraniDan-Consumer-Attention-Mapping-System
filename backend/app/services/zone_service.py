@@ -7,7 +7,7 @@ Business logic for zone CRUD operations.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from fastapi import HTTPException, status
 
 from app.models.zone import Zone
@@ -99,7 +99,10 @@ def get_zones(
     if page is not None and page_size is not None:
         query = query.offset((page - 1) * page_size).limit(page_size)
 
-    zones = query.all()
+    zones = query.options(
+        joinedload(Zone.store),
+        selectinload(Zone.shelves),
+    ).all()
     return [_to_response(z) for z in zones], total
 
 

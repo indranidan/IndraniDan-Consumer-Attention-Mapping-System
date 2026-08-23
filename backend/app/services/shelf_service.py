@@ -7,7 +7,7 @@ Business logic for shelf CRUD operations.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from fastapi import HTTPException, status
 
 from app.models.shelf import Shelf
@@ -123,7 +123,11 @@ def get_shelves(
     if page is not None and page_size is not None:
         query = query.offset((page - 1) * page_size).limit(page_size)
 
-    shelves = query.all()
+    shelves = query.options(
+        joinedload(Shelf.store),
+        joinedload(Shelf.zone),
+        selectinload(Shelf.products),
+    ).all()
     return [_to_response(s) for s in shelves], total
 
 
