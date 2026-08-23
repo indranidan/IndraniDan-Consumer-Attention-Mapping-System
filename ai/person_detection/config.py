@@ -64,7 +64,12 @@ def _resolve_model_path(raw_path: str) -> Path:
     """
     path = Path(raw_path)
     if not path.is_absolute():
-        path = CONFIG_PROJECT_ROOT / path
+        resolved = CONFIG_PROJECT_ROOT / path
+        if not resolved.exists():
+            models_fallback = CONFIG_PROJECT_ROOT / "ai" / "models" / path.name
+            if models_fallback.exists():
+                return models_fallback
+        return resolved
     return path
 
 

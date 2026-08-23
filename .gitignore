@@ -30,6 +30,8 @@ htmlcov/
 *.swp
 *.swo
 *~
+.agent/
+openspec
 
 # ── OS ───────────────────────────────────────────────────────
 .DS_Store
@@ -50,17 +52,12 @@ ai/coco/*.pt
 ai/models/*.task
 !ai/models/.gitkeep
 
-# ── AI — Training & Inference Outputs (all regenerable) ──────
-ai/outputs/
-ai/**/outputs/
+# ── Storage & Outputs ────────────────────────────────────────
+storage/
 outputs/
+ai/outputs/
+backend/outputs/
 
-# ── AI — Test / Sample Media ────────────────────────────────
-*.mp4
-*.avi
-*.mov
-*.mkv
-*.webm
 
 # ── ONNX / TensorRT exports ─────────────────────────────────
 *.onnx

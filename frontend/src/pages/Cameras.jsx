@@ -1,13 +1,17 @@
-/**
- * Cameras Page
- * =============
- * Full CRUD management page for cameras.
- */
-
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getCameras, createCamera, updateCamera, deleteCamera, getStores, getZones } from "../services/storeService";
+import {
+  getCameras,
+  createCamera,
+  updateCamera,
+  deleteCamera,
+  getStores,
+  getZones,
+  testCameraStream,
+  getCameraSnapshot,
+  getSyncCachedData,
+} from "../services/storeService";
 import PageHeader from "../components/ui/PageHeader";
 import DataTable from "../components/ui/DataTable";
 import Modal from "../components/ui/Modal";
@@ -22,16 +26,26 @@ export default function Cameras() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const storeIdFilter = searchParams.get("store_id") || "";
-  const [cameras, setCameras] = useState([]);
-  const [stores, setStores] = useState([]);
+
+  const initialParams = { page: 1, page_size: 10 };
+  if (storeIdFilter) initialParams.store_id = storeIdFilter;
+  const cachedCamerasRes = getSyncCachedData("cameras", JSON.stringify(initialParams));
+  const cachedStoresRes = getSyncCachedData("stores", JSON.stringify({}));
+
+  const [cameras, setCameras] = useState(cachedCamerasRes?.data || []);
+  const [stores, setStores] = useState(cachedStoresRes?.data || []);
   const [zones, setZones] = useState([]);
   const [filterZones, setFilterZones] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedCamerasRes);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [totalCount, setTotalCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(
+    cachedCamerasRes
+      ? parseInt(cachedCamerasRes?.headers?.["x-total-count"] || cachedCamerasRes?.data?.length || 0, 10)
+      : 0
+  );
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCamera, setEditingCamera] = useState(null);
@@ -41,11 +55,18 @@ export default function Cameras() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Stream diagnostics & snapshot modal state
+  const [testingId, setTestingId] = useState(null);
+  const [streamHealth, setStreamHealth] = useState({});
+  const [snapshotModal, setSnapshotModal] = useState(false);
+  const [snapshotData, setSnapshotData] = useState(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
+
   const userRole = typeof user?.role === "object" ? user.role.role_name : user?.role;
   const canWrite = ["Administrator", "Store Manager"].includes(userRole);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    if (!cameras.length) setLoading(true);
     try {
       const params = { page, page_size: pageSize };
       if (storeIdFilter) params.store_id = storeIdFilter;
@@ -56,9 +77,16 @@ export default function Cameras() {
       setStores(storesRes.data);
       const total = parseInt(camerasRes.headers["x-total-count"] || camerasRes.data.length, 10);
       setTotalCount(total);
-    } catch { setCameras([]); setTotalCount(0); }
-    finally { setLoading(false); }
+    } catch {
+      if (!cameras.length) {
+        setCameras([]);
+        setTotalCount(0);
+      }
+    } finally {
+      setLoading(false);
+    }
   }, [search, storeIdFilter, filters, page, pageSize]);
+
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -107,6 +135,38 @@ export default function Cameras() {
   const openCreate = () => { setEditingCamera(null); setForm({ store_id: storeIdFilter || (stores[0]?.id || ""), zone_id: "", name: "", camera_source: "", location_description: "", status: "active" }); setError(""); setModalOpen(true); };
   const openEdit = (camera) => { setEditingCamera(camera); setForm({ store_id: camera.store_id, zone_id: camera.zone_id || "", name: camera.name || "", camera_source: camera.camera_source || "", location_description: camera.location_description || "", status: camera.status || "active" }); setError(""); setModalOpen(true); };
 
+  const handleTestStream = async (cam) => {
+    setTestingId(cam.id);
+    try {
+      const res = await testCameraStream(cam.id);
+      setStreamHealth((prev) => ({ ...prev, [cam.id]: res.data }));
+    } catch (err) {
+      setStreamHealth((prev) => ({
+        ...prev,
+        [cam.id]: { status: "OFFLINE", message: "Failed to connect to stream." },
+      }));
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  const handleViewSnapshot = async (cam) => {
+    setSnapshotLoading(true);
+    setSnapshotData(null);
+    setSnapshotModal(true);
+    try {
+      const res = await getCameraSnapshot(cam.id);
+      setSnapshotData(res.data);
+    } catch (err) {
+      setSnapshotData({
+        error: err.response?.data?.detail || "Could not capture live frame snapshot.",
+        camera_name: cam.name,
+      });
+    } finally {
+      setSnapshotLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault(); setSaving(true); setError("");
     try {
@@ -126,42 +186,136 @@ export default function Cameras() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto animate-fade-in">
-      <PageHeader title="Cameras" description="Manage surveillance cameras in your stores"
+    <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-12">
+      <PageHeader title="Cameras" description="Manage surveillance cameras and live stream connectivity in your stores"
         actionLabel="Add Camera" onAction={openCreate} showAction={canWrite}
         icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>}
       />
 
-      <DataTable columns={canWrite ? ["Camera", "Source", "Store", "Zone", "Status", "Actions"] : ["Camera", "Source", "Store", "Zone", "Status"]}
+      <DataTable columns={["Camera", "Source", "Stream Health", "Store & Zone", "Status", "Actions"]}
         data={cameras} loading={loading} searchValue={search} onSearchChange={handleSearchChange}
         searchPlaceholder="Search cameras..." emptyTitle="No cameras found"
         page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={setPage} onPageSizeChange={handlePageSizeChange}
         filterSlot={<FilterPanel filters={filterConfig} values={filters} onChange={handleFilterChange} onReset={handleFilterReset} />}
-        renderRow={(camera) => (
-          <tr key={camera.id} className="hover:bg-gray-800/30 transition-colors">
-            <td className="px-5 py-4">
-              <p className="text-sm font-medium text-white">{camera.name}</p>
-              {camera.location_description && <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[200px]">{camera.location_description}</p>}
-            </td>
-            <td className="px-5 py-4"><span className="inline-flex px-2 py-0.5 rounded-md bg-gray-800/50 text-xs font-mono text-cyan-400 truncate max-w-[180px]">{camera.camera_source}</span></td>
-            <td className="px-5 py-4"><span className="text-sm text-gray-300">{camera.store_name || "—"}</span></td>
-            <td className="px-5 py-4"><span className="text-sm text-gray-300">{camera.zone_name || "—"}</span></td>
-            <td className="px-5 py-4"><StatusBadge status={camera.status} /></td>
-            {canWrite && (
+        renderRow={(camera) => {
+          const health = streamHealth[camera.id];
+          const isTesting = testingId === camera.id;
+
+          return (
+            <tr key={camera.id} className="hover:bg-gray-800/30 transition-colors">
+              <td className="px-5 py-4">
+                <p className="text-sm font-medium text-white">{camera.name}</p>
+                {camera.location_description && <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[200px]">{camera.location_description}</p>}
+              </td>
+              <td className="px-5 py-4">
+                <span className="inline-flex px-2 py-0.5 rounded-md bg-gray-800/50 text-xs font-mono text-cyan-400 truncate max-w-[180px]">
+                  {camera.camera_source}
+                </span>
+              </td>
+              <td className="px-5 py-4">
+                {isTesting ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-violet-500/10 text-violet-300 border border-violet-500/20 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping" />
+                    Probing stream...
+                  </span>
+                ) : health ? (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono border ${
+                      health.status === "ONLINE"
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        : "bg-red-500/10 text-red-400 border-red-500/20"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${health.status === "ONLINE" ? "bg-emerald-400" : "bg-red-400"}`} />
+                    {health.status} {health.latency_ms !== undefined ? `(${health.latency_ms}ms)` : ""}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-gray-500 font-mono">Not Tested</span>
+                )}
+              </td>
+              <td className="px-5 py-4">
+                <p className="text-sm text-gray-300">{camera.store_name || "—"}</p>
+                <p className="text-xs text-gray-500">{camera.zone_name || "No Zone"}</p>
+              </td>
+              <td className="px-5 py-4"><StatusBadge status={camera.status} /></td>
               <td className="px-5 py-4">
                 <div className="flex items-center gap-1">
-                  <button onClick={() => openEdit(camera)} className="p-1.5 rounded-lg text-gray-400 hover:text-violet-400 hover:bg-violet-500/10 transition-all" title="Edit">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  {/* Test Stream Button */}
+                  <button
+                    onClick={() => handleTestStream(camera)}
+                    disabled={isTesting}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all disabled:opacity-50"
+                    title="Ping & Test Stream Health"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
                   </button>
-                  <button onClick={() => setDeleteTarget(camera)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all" title="Delete">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+
+                  {/* Preview Snapshot Button */}
+                  <button
+                    onClick={() => handleViewSnapshot(camera)}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
+                    title="Capture Live Snapshot Preview"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
                   </button>
+
+                  {canWrite && (
+                    <>
+                      <button onClick={() => openEdit(camera)} className="p-1.5 rounded-lg text-gray-400 hover:text-violet-400 hover:bg-violet-500/10 transition-all" title="Edit">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      </button>
+                      <button onClick={() => setDeleteTarget(camera)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all" title="Delete">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </>
+                  )}
                 </div>
               </td>
-            )}
-          </tr>
-        )}
+            </tr>
+          );
+        }}
       />
+
+      {/* Snapshot Preview Modal */}
+      <Modal isOpen={snapshotModal} onClose={() => setSnapshotModal(false)} title="Live Camera Frame Snapshot" maxWidth="max-w-2xl">
+        <div className="space-y-4">
+          {snapshotLoading ? (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400 space-y-3">
+              <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs">Connecting to stream & grabbing frame snapshot...</p>
+            </div>
+          ) : snapshotData?.error ? (
+            <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl text-center space-y-2">
+              <p className="text-red-400 font-semibold text-sm">❌ Stream Capture Error</p>
+              <p className="text-xs text-gray-400">{snapshotData.error}</p>
+            </div>
+          ) : snapshotData?.image_data ? (
+            <div className="space-y-3">
+              <div className="rounded-2xl overflow-hidden border border-gray-800 bg-black aspect-video flex items-center justify-center">
+                <img src={snapshotData.image_data} alt="Camera snapshot" className="w-full h-full object-contain" />
+              </div>
+              <div className="flex items-center justify-between text-xs text-gray-400 font-mono">
+                <span>Camera: {snapshotData.camera_name}</span>
+                <span>Captured: {new Date(snapshotData.timestamp).toLocaleTimeString()}</span>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="pt-2 flex justify-end">
+            <button
+              onClick={() => setSnapshotModal(false)}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gray-800 hover:bg-gray-700 transition-all"
+            >
+              Close Preview
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingCamera ? "Edit Camera" : "Create Camera"} maxWidth="max-w-xl">
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -215,3 +369,4 @@ export default function Cameras() {
     </div>
   );
 }
+

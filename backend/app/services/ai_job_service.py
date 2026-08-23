@@ -48,6 +48,7 @@ def _to_response(job: AIJob) -> AIJobResponse:
         error_message=job.error_message,
         output_path=job.output_path,
         summary=job.summary,
+        zone_config=job.zone_config,
         created_by=job.created_by,
         created_at=job.created_at,
         updated_at=job.updated_at,
@@ -199,6 +200,7 @@ def create_job(
         source=source,
         status="QUEUED",
         output_path=str(Path(settings.AI_OUTPUT_PATH) / str(job_id)),
+        zone_config=payload.zone_config,
         created_by=current_user.id,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -211,7 +213,7 @@ def create_job(
     # 8. Launch Background Worker
     worker_thread = threading.Thread(
         target=run_pipeline,
-        args=(job_id, source, str(output_base), settings.AI_PIPELINE_TIMEOUT),
+        args=(job_id, source, str(output_base), settings.AI_PIPELINE_TIMEOUT, payload.zone_config),
         daemon=True,
         name=f"ai-worker-{job_id}",
     )

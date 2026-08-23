@@ -7,7 +7,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getStores, createStore, updateStore, deleteStore } from "../services/storeService";
+import {
+  getStores,
+  createStore,
+  updateStore,
+  deleteStore,
+  getSyncCachedData,
+} from "../services/storeService";
 import PageHeader from "../components/ui/PageHeader";
 import DataTable from "../components/ui/DataTable";
 import Modal from "../components/ui/Modal";
@@ -38,13 +44,15 @@ const emptyFilters = {
 };
 
 const filterConfig = [
-  { key: "name", label: "Store Name", type: "text", placeholder: "Filter by name..." },
-  { key: "store_code", label: "Store Code", type: "text", placeholder: "e.g., STR001" },
-  { key: "city", label: "City", type: "text", placeholder: "e.g., Kolkata" },
-  { key: "state", label: "State", type: "text", placeholder: "e.g., West Bengal" },
-  { key: "country", label: "Country", type: "text", placeholder: "e.g., India" },
+  { key: "name", label: "Store Name", type: "text", placeholder: "e.g. Flagship" },
+  { key: "store_code", label: "Store Code", type: "text", placeholder: "e.g. NYC-01" },
+  { key: "city", label: "City", type: "text", placeholder: "e.g. New York" },
+  { key: "state", label: "State", type: "text", placeholder: "e.g. NY" },
+  { key: "country", label: "Country", type: "text", placeholder: "e.g. USA" },
   {
-    key: "status", label: "Status", type: "select",
+    key: "status",
+    label: "Status",
+    type: "select",
     options: [
       { value: "active", label: "Active" },
       { value: "inactive", label: "Inactive" },
@@ -55,13 +63,18 @@ const filterConfig = [
 export default function Stores() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [stores, setStores] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cachedStoresRes = getSyncCachedData("stores", JSON.stringify({ page: 1, page_size: 10 }));
+  const [stores, setStores] = useState(cachedStoresRes?.data || []);
+  const [loading, setLoading] = useState(!cachedStoresRes);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [totalCount, setTotalCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(
+    cachedStoresRes
+      ? parseInt(cachedStoresRes?.headers?.["x-total-count"] || cachedStoresRes?.data?.length || 0, 10)
+      : 0
+  );
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingStore, setEditingStore] = useState(null);
@@ -77,8 +90,9 @@ export default function Stores() {
   const showActions = canWrite || canDelete;
 
   const fetchStores = useCallback(async () => {
-    setLoading(true);
+    if (!stores.length) setLoading(true);
     try {
+
       const params = { page, page_size: pageSize };
       if (search) params.search = search;
       // Merge active filters

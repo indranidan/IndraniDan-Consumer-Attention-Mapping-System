@@ -23,6 +23,7 @@ from app.schemas.auth import MessageResponse
 from app.middleware.jwt_auth import get_current_user
 from app.core.dependencies import admin_or_store_manager, admin_only, any_role
 from app.services import store_service
+from app.core.cache import cache_manager, invalidate_cache_tags
 
 router = APIRouter(prefix="/api/stores", tags=["Stores"])
 
@@ -46,7 +47,9 @@ def create_store(
     db: Session = Depends(get_db),
 ):
     """Create a new retail store. Requires Administrator or Store Manager role."""
-    return store_service.create_store(db, payload, current_user.id)
+    result = store_service.create_store(db, payload, current_user.id)
+    invalidate_cache_tags("stores", "dashboard")
+    return result
 
 
 # ── List Stores ───────────────────────────────────────────────
@@ -72,13 +75,24 @@ def list_stores(
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
-    """List all stores. Available to all authenticated users."""
+    """List all stores with sub-millisecond response caching. Available to all authenticated users."""
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=60"
+    cache_key = f"stores:list:{search}:{name}:{store_code}:{city}:{state}:{country}:{status}:{page}:{page_size}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        response.headers["X-Total-Count"] = str(cached.get("total", 0))
+        return cached.get("items", [])
+
     items, total = store_service.get_stores(
         db, search=search, name=name, store_code=store_code,
         city=city, state=state, country=country, status=status,
         page=page, page_size=page_size,
     )
     response.headers["X-Total-Count"] = str(total)
+    
+    # Store schema representations in cache
+    serialized = [StoreResponse.model_validate(item).model_dump(mode="json") for item in items]
+    cache_manager.set(cache_key, {"items": serialized, "total": total}, ttl_seconds=60.0, tags=["stores"])
     return items
 
 
@@ -94,11 +108,22 @@ def list_stores(
 )
 def get_store(
     store_id: uuid.UUID,
+    response: Response,
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
     """Get a store by its ID. Available to all authenticated users."""
-    return store_service.get_store_by_id(db, store_id)
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=60"
+    cache_key = f"store:{store_id}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        return cached
+
+    store = store_service.get_store_by_id(db, store_id)
+    if store:
+        cache_manager.set(cache_key, StoreResponse.model_validate(store).model_dump(mode="json"), ttl_seconds=60.0, tags=["stores"])
+    return store
+
 
 
 # ── Update Store ──────────────────────────────────────────────
@@ -120,7 +145,9 @@ def update_store(
     db: Session = Depends(get_db),
 ):
     """Update a store. Requires Administrator or Store Manager role."""
-    return store_service.update_store(db, store_id, payload)
+    result = store_service.update_store(db, store_id, payload)
+    invalidate_cache_tags("stores", "dashboard")
+    return result
 
 
 # ── Delete Store ──────────────────────────────────────────────
@@ -144,4 +171,6 @@ def delete_store(
     Requires Administrator role.
     """
     store_service.delete_store(db, store_id)
+    invalidate_cache_tags("stores", "zones", "shelves", "products", "cameras", "dashboard")
     return MessageResponse(message="Store deleted successfully.")
+

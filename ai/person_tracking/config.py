@@ -33,19 +33,21 @@ class PersonTrackingConfig:
     new_track_threshold: float
     track_buffer: int
     match_threshold: float
+    minimum_consecutive_frames: int = 1
+    min_track_frames: int = 15
 
     # Visualizer settings
-    trajectory_enabled: bool
-    trajectory_length: int
+    trajectory_enabled: bool = True
+    trajectory_length: int = 30
 
     # Output control
-    output_base: Path
+    output_base: Path = CONFIG_PROJECT_ROOT / "outputs" / "module3" / "phase2"
 
     # Derived paths
-    videos_dir: Path
-    frames_dir: Path
-    reports_dir: Path
-    logs_dir: Path
+    videos_dir: Path = CONFIG_PROJECT_ROOT / "outputs" / "module3" / "phase2" / "videos"
+    frames_dir: Path = CONFIG_PROJECT_ROOT / "outputs" / "module3" / "phase2" / "frames"
+    reports_dir: Path = CONFIG_PROJECT_ROOT / "outputs" / "module3" / "phase2" / "reports"
+    logs_dir: Path = CONFIG_PROJECT_ROOT / "outputs" / "module3" / "phase2" / "logs"
 
 
 def load_person_tracking_config() -> PersonTrackingConfig:
@@ -65,18 +67,24 @@ def load_person_tracking_config() -> PersonTrackingConfig:
     # Load base detection config from Phase 1
     detection_config = load_person_detection_config()
 
-    # ByteTrack settings with sensible retail video defaults
+    # ByteTrack settings with robust retail video defaults
     track_high_thresh = float(
-        _optional_env("TRACKER_TRACK_HIGH_THRESHOLD", "0.60")
+        _optional_env("TRACKER_TRACK_HIGH_THRESHOLD", "0.55")
     )
     track_low_thresh = float(
-        _optional_env("TRACKER_TRACK_LOW_THRESHOLD", "0.10")
+        _optional_env("TRACKER_TRACK_LOW_THRESHOLD", "0.15")
     )
     new_track_thresh = float(
-        _optional_env("TRACKER_NEW_TRACK_THRESHOLD", "0.25")
+        _optional_env("TRACKER_NEW_TRACK_THRESHOLD", "0.45")
     )
-    track_buffer = int(_optional_env("TRACKER_TRACK_BUFFER", "30"))
-    match_thresh = float(_optional_env("TRACKER_MATCH_THRESHOLD", "0.80"))
+    track_buffer = int(_optional_env("TRACKER_TRACK_BUFFER", "90"))
+    match_thresh = float(_optional_env("TRACKER_MATCH_THRESHOLD", "0.70"))
+    min_consecutive_frames = int(
+        _optional_env("TRACKER_MIN_CONSECUTIVE_FRAMES", "1")
+    )
+    min_track_frames = int(
+        _optional_env("TRACKER_MIN_TRACK_FRAMES", "15")
+    )
 
     # Trajectory settings
     traj_enabled_val = _optional_env("TRACK_TRAJECTORY_ENABLED", "true").lower()
@@ -97,6 +105,8 @@ def load_person_tracking_config() -> PersonTrackingConfig:
         new_track_threshold=new_track_thresh,
         track_buffer=track_buffer,
         match_threshold=match_thresh,
+        minimum_consecutive_frames=min_consecutive_frames,
+        min_track_frames=min_track_frames,
         trajectory_enabled=trajectory_enabled,
         trajectory_length=trajectory_length,
         output_base=output_base,

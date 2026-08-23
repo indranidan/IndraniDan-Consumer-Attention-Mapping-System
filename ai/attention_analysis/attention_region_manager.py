@@ -32,16 +32,24 @@ class AttentionRegion:
     name: str
     type: str  # "shelf", "zone", "product"
     polygon: List[Tuple[int, int]]
+    raw_polygon: List[Tuple[float, float]] = field(default_factory=list)
+    is_normalized: bool = False
     center: Tuple[int, int] = field(init=False)
     _contour: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Compute the polygon center and OpenCV contour."""
+        if not self.raw_polygon:
+            self.raw_polygon = [(float(p[0]), float(p[1])) for p in self.polygon]
+        self._recompute_geometry()
+
+    def _recompute_geometry(self) -> None:
+        """Recompute center and OpenCV contour from polygon vertices."""
         xs = [p[0] for p in self.polygon]
         ys = [p[1] for p in self.polygon]
         self.center = (
-            int(sum(xs) / len(xs)),
-            int(sum(ys) / len(ys)),
+            int(sum(xs) / len(xs)) if xs else 0,
+            int(sum(ys) / len(ys)) if ys else 0,
         )
         self._contour = np.array(self.polygon, dtype=np.int32).reshape((-1, 1, 2))
 
@@ -49,6 +57,15 @@ class AttentionRegion:
     def contour(self) -> np.ndarray:
         """Return the pre-computed OpenCV contour for this region polygon."""
         return self._contour
+
+    def scale_to_frame(self, width: int, height: int) -> None:
+        """Scale polygon coordinates from normalized (0-1) to pixel space."""
+        if self.is_normalized and width > 0 and height > 0:
+            self.polygon = [
+                (int(round(p[0] * width)), int(round(p[1] * height)))
+                for p in self.raw_polygon
+            ]
+            self._recompute_geometry()
 
 
 class AttentionRegionManager:
@@ -58,11 +75,13 @@ class AttentionRegionManager:
     Provides spatial queries for ray-polygon intersection to determine
     whether a shopper's estimated attention direction intersects a
     configured retail region.
+    Supports normalized (0.0 - 1.0) coordinates and resolution auto-scaling.
     """
 
     def __init__(
         self,
         config_path: Path,
+        frame_size: Optional[Tuple[int, int]] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -72,6 +91,8 @@ class AttentionRegionManager:
         ----------
         config_path : Path
             Path to the attention_regions.json configuration file.
+        frame_size : Tuple[int, int], optional
+            (width, height) to scale normalized coordinates immediately.
         logger : logging.Logger, optional
             Logger instance.
 
@@ -83,10 +104,27 @@ class AttentionRegionManager:
             If the configuration is invalid.
         """
         self.config_path = config_path
+        self.frame_size = frame_size
         self.logger = logger or setup_logger("attention_region_manager")
         self.regions: Dict[str, AttentionRegion] = {}
 
         self._load_config()
+        if self.frame_size:
+            self.scale_to_frame_size(self.frame_size[0], self.frame_size[1])
+
+    @property
+    def is_normalized(self) -> bool:
+        """Return whether loaded attention regions use normalized (0.0 - 1.0) coordinates."""
+        return any(r.is_normalized for r in self.regions.values())
+
+    def scale_to_frame_size(self, width: int, height: int) -> None:
+        """
+        Scale all normalized attention region polygons to the specified video frame dimensions.
+        """
+        self.frame_size = (width, height)
+        for region in self.regions.values():
+            region.scale_to_frame(width, height)
+        self.logger.info(f"Scaled attention regions to frame resolution: {width}x{height}")
 
     def _load_config(self) -> None:
         """Load and validate attention region configuration from JSON."""
@@ -155,13 +193,24 @@ class AttentionRegionManager:
         # Validate polygon
         self._validate_polygon(raw_polygon, region_id)
 
-        polygon = [(int(p[0]), int(p[1])) for p in raw_polygon]
+        raw_points = [(float(p[0]), float(p[1])) for p in raw_polygon]
+        is_normalized = all(0.0 <= p[0] <= 1.0 and 0.0 <= p[1] <= 1.0 for p in raw_points) and any(
+            isinstance(p[0], float) or isinstance(p[1], float) for p in raw_points
+        )
+
+        if is_normalized and self.frame_size:
+            w, h = self.frame_size
+            polygon = [(int(round(p[0] * w)), int(round(p[1] * h))) for p in raw_points]
+        else:
+            polygon = [(int(round(p[0])), int(round(p[1]))) for p in raw_points]
 
         return AttentionRegion(
             id=region_id,
             name=region_name,
             type=region_type,
             polygon=polygon,
+            raw_polygon=raw_points,
+            is_normalized=is_normalized,
         )
 
     def _validate_polygon(self, polygon: list, region_id: str) -> None:
@@ -179,8 +228,8 @@ class AttentionRegionManager:
                     f"expected [x, y], got {point}"
                 )
             try:
-                int(point[0])
-                int(point[1])
+                float(point[0])
+                float(point[1])
             except (TypeError, ValueError) as exc:
                 raise ValueError(
                     f"Non-numeric coordinate at vertex {i} in attention region "

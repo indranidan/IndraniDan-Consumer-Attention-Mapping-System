@@ -22,6 +22,7 @@ from pathlib import Path
 import sys
 import tempfile
 import uuid
+# pyrefly: ignore [missing-import]
 import pytest
 
 # Ensure backend and project root are in sys.path
@@ -32,10 +33,14 @@ if str(_BACKEND_DIR) not in sys.path:
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from app.module5.comparison_analyzer import Module5ComparisonAnalyzer
-from app.module5.engine import Module5InteractionEngine
-from app.module5.interaction_detector import Module5InteractionDetector
-from app.module5.models import (
+# pyrefly: ignore [missing-import]
+from app.modules.interaction.comparison_analyzer import Module5ComparisonAnalyzer
+# pyrefly: ignore [missing-import]
+from app.modules.interaction.engine import Module5InteractionEngine
+# pyrefly: ignore [missing-import]
+from app.modules.interaction.interaction_detector import Module5InteractionDetector
+# pyrefly: ignore [missing-import]
+from app.modules.interaction.models import (
     InteractionEventType,
     InteractionSource,
     Module5Summary,
@@ -44,9 +49,12 @@ from app.module5.models import (
     ProductInteractionEvent,
     ShelfInteractionMetric,
 )
-from app.module5.pickup_return_detector import Module5PickupReturnDetector
-from app.module5.report_generator import Module5ReportGenerator
-from app.module5.shelf_interaction_monitor import Module5ShelfInteractionMonitor
+# pyrefly: ignore [missing-import]
+from app.modules.interaction.pickup_return_detector import Module5PickupReturnDetector
+# pyrefly: ignore [missing-import]
+from app.modules.interaction.report_generator import Module5ReportGenerator
+# pyrefly: ignore [missing-import]
+from app.modules.interaction.shelf_interaction_monitor import Module5ShelfInteractionMonitor
 
 
 # ── Test 1: Product Viewed Detection ─────────────────────────────────
@@ -608,12 +616,11 @@ def test_process_completed_job_end_to_end():
 
 # ── Test 12: Database Models & Pydantic Schema Validation ─────────────
 def test_database_models_and_schemas():
-    """Verify SQLAlchemy models and Pydantic schemas for Module 5."""
-    from app.models.product_interaction import (
-        ProductInteractionAnalysis,
-        ProductInteractionEventModel,
-    )
-    from app.schemas.module5 import (
+    """Verify document repository persistence and Pydantic schemas for Module 5."""
+    # pyrefly: ignore [missing-import]
+    from app.repositories.ai_document_repository import AIDocumentRepository
+    # pyrefly: ignore [missing-import]
+    from app.schemas.interaction import (
         InteractionEventItem,
         Module5AnalysisResponse,
         Module5SummarySchema,
@@ -626,45 +633,27 @@ def test_database_models_and_schemas():
     test_cam_id = uuid.uuid4()
     test_store_id = uuid.uuid4()
 
-    analysis_orm = ProductInteractionAnalysis(
-        id=uuid.uuid4(),
-        job_id=test_job_id,
-        camera_id=test_cam_id,
-        store_id=test_store_id,
-        total_views=10,
-        total_pickups=0,
-        total_returns=0,
-        total_comparisons=2,
-        total_purchases=0,
-        total_unique_viewers=5,
-        total_engagement_duration_sec=25.0,
-        pickup_detection_status="INSUFFICIENT_VISUAL_EVIDENCE",
-        purchase_data_status="UNAVAILABLE / NOT CONFIGURED (No POS Data)",
-    )
+    analysis_doc = {
+        "job_id": str(test_job_id),
+        "camera_id": str(test_cam_id),
+        "store_id": str(test_store_id),
+        "summary": {
+            "total_views": 10,
+            "total_pickups": 0,
+            "total_returns": 0,
+            "total_comparisons": 2,
+            "total_purchases": 0,
+            "total_unique_viewers": 5,
+            "total_engagement_duration_sec": 25.0,
+            "pickup_detection_status": "INSUFFICIENT_VISUAL_EVIDENCE",
+            "purchase_data_status": "UNAVAILABLE / NOT CONFIGURED (No POS Data)",
+        },
+    }
 
-    assert analysis_orm.total_views == 10
-    assert analysis_orm.total_comparisons == 2
-    assert "ProductInteractionAnalysis" in repr(analysis_orm)
-
-    event_orm = ProductInteractionEventModel(
-        id=uuid.uuid4(),
-        analysis_id=analysis_orm.id,
-        job_id=test_job_id,
-        event_id="EVT_101",
-        event_type="PRODUCT_VIEWED",
-        track_id=12,
-        product_name="Orange Juice",
-        shelf_name="Beverage Shelf",
-        timestamp=4.5,
-        start_time=4.5,
-        end_time=7.0,
-        duration_seconds=2.5,
-        confidence=0.92,
-    )
-
-    assert event_orm.track_id == 12
-    assert event_orm.duration_seconds == 2.5
-    assert "Orange Juice" in repr(event_orm)
+    AIDocumentRepository.save_module5_analysis_sync(test_job_id, analysis_doc)
+    loaded = AIDocumentRepository.get_module5_analysis_sync(str(test_job_id))
+    assert loaded is not None
+    assert loaded["summary"]["total_views"] == 10
 
     # Validate Pydantic response schema
     summary_schema = Module5SummarySchema(

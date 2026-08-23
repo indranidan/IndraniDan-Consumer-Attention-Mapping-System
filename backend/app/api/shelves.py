@@ -22,6 +22,7 @@ from app.schemas.shelf import ShelfCreate, ShelfUpdate, ShelfResponse
 from app.schemas.auth import MessageResponse
 from app.core.dependencies import admin_or_store_manager, any_role
 from app.services import shelf_service
+from app.core.cache import cache_manager, invalidate_cache_tags
 
 router = APIRouter(prefix="/api/shelves", tags=["Shelves"])
 
@@ -44,7 +45,9 @@ def create_shelf(
     db: Session = Depends(get_db),
 ):
     """Create a new shelf. Requires Administrator or Store Manager role."""
-    return shelf_service.create_shelf(db, payload)
+    result = shelf_service.create_shelf(db, payload)
+    invalidate_cache_tags("shelves", "dashboard")
+    return result
 
 
 @router.get(
@@ -64,13 +67,22 @@ def list_shelves(
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
-    """List all shelves. Available to all authenticated users."""
+    """List all shelves with sub-millisecond response caching. Available to all authenticated users."""
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=60"
+    cache_key = f"shelves:list:{store_id}:{zone_id}:{search}:{category}:{shelf_code}:{page}:{page_size}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        response.headers["X-Total-Count"] = str(cached.get("total", 0))
+        return cached.get("items", [])
+
     items, total = shelf_service.get_shelves(
         db, store_id=store_id, zone_id=zone_id, search=search,
         category=category, shelf_code=shelf_code,
         page=page, page_size=page_size,
     )
     response.headers["X-Total-Count"] = str(total)
+    serialized = [ShelfResponse.model_validate(item).model_dump(mode="json") for item in items]
+    cache_manager.set(cache_key, {"items": serialized, "total": total}, ttl_seconds=60.0, tags=["shelves"])
     return items
 
 
@@ -82,11 +94,22 @@ def list_shelves(
 )
 def get_shelf(
     shelf_id: uuid.UUID,
+    response: Response,
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
     """Get a shelf by its ID. Available to all authenticated users."""
-    return shelf_service.get_shelf_by_id(db, shelf_id)
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=60"
+    cache_key = f"shelf:{shelf_id}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        return cached
+
+
+    shelf = shelf_service.get_shelf_by_id(db, shelf_id)
+    if shelf:
+        cache_manager.set(cache_key, ShelfResponse.model_validate(shelf).model_dump(mode="json"), ttl_seconds=60.0, tags=["shelves"])
+    return shelf
 
 
 @router.put(
@@ -106,7 +129,9 @@ def update_shelf(
     db: Session = Depends(get_db),
 ):
     """Update a shelf. Requires Administrator or Store Manager role."""
-    return shelf_service.update_shelf(db, shelf_id, payload)
+    result = shelf_service.update_shelf(db, shelf_id, payload)
+    invalidate_cache_tags("shelves", "dashboard")
+    return result
 
 
 @router.delete(
@@ -125,4 +150,6 @@ def delete_shelf(
 ):
     """Delete a shelf and all its products. Requires Administrator or Store Manager role."""
     shelf_service.delete_shelf(db, shelf_id)
+    invalidate_cache_tags("shelves", "products", "dashboard")
     return MessageResponse(message="Shelf deleted successfully.")
+

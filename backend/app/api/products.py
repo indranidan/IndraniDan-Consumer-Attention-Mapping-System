@@ -22,6 +22,7 @@ from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
 from app.schemas.auth import MessageResponse
 from app.core.dependencies import admin_or_store_manager, any_role
 from app.services import product_service
+from app.core.cache import cache_manager, invalidate_cache_tags
 
 router = APIRouter(prefix="/api/products", tags=["Products"])
 
@@ -44,7 +45,9 @@ def create_product(
     db: Session = Depends(get_db),
 ):
     """Create a new product. Requires Administrator or Store Manager role."""
-    return product_service.create_product(db, payload)
+    result = product_service.create_product(db, payload)
+    invalidate_cache_tags("products", "dashboard")
+    return result
 
 
 @router.get(
@@ -67,7 +70,14 @@ def list_products(
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
-    """List all products. Available to all authenticated users."""
+    """List all products with sub-millisecond response caching. Available to all authenticated users."""
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=60"
+    cache_key = f"products:list:{store_id}:{shelf_id}:{search}:{zone_id}:{brand}:{category}:{min_price}:{max_price}:{page}:{page_size}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        response.headers["X-Total-Count"] = str(cached.get("total", 0))
+        return cached.get("items", [])
+
     items, total = product_service.get_products(
         db, store_id=store_id, shelf_id=shelf_id, search=search,
         zone_id=zone_id, brand=brand, category=category,
@@ -75,6 +85,8 @@ def list_products(
         page=page, page_size=page_size,
     )
     response.headers["X-Total-Count"] = str(total)
+    serialized = [ProductResponse.model_validate(item).model_dump(mode="json") for item in items]
+    cache_manager.set(cache_key, {"items": serialized, "total": total}, ttl_seconds=60.0, tags=["products"])
     return items
 
 
@@ -86,11 +98,22 @@ def list_products(
 )
 def get_product(
     product_id: uuid.UUID,
+    response: Response,
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
     """Get a product by its ID. Available to all authenticated users."""
-    return product_service.get_product_by_id(db, product_id)
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=60"
+    cache_key = f"product:{product_id}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        return cached
+
+
+    product = product_service.get_product_by_id(db, product_id)
+    if product:
+        cache_manager.set(cache_key, ProductResponse.model_validate(product).model_dump(mode="json"), ttl_seconds=60.0, tags=["products"])
+    return product
 
 
 @router.put(
@@ -110,7 +133,9 @@ def update_product(
     db: Session = Depends(get_db),
 ):
     """Update a product. Requires Administrator or Store Manager role."""
-    return product_service.update_product(db, product_id, payload)
+    result = product_service.update_product(db, product_id, payload)
+    invalidate_cache_tags("products", "dashboard")
+    return result
 
 
 @router.delete(
@@ -129,4 +154,6 @@ def delete_product(
 ):
     """Delete a product. Requires Administrator or Store Manager role."""
     product_service.delete_product(db, product_id)
+    invalidate_cache_tags("products", "dashboard")
     return MessageResponse(message="Product deleted successfully.")
+

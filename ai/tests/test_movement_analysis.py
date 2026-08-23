@@ -434,3 +434,43 @@ class TestPathTracker:
         vis = path.get_visualization_points()
         assert len(vis) == 3
         assert vis[0] == (100, 200)
+
+
+# ==================================================================
+# TEST: Normalized Zone Coordinate Scaling
+# ==================================================================
+class TestNormalizedZoneScaling:
+    def test_normalized_coordinates_scale_to_frame_size(self, tmp_path):
+        from ai.movement_analysis.zone_manager import ZoneManager
+
+        config = {
+            "zones": [
+                {
+                    "id": "norm_zone_1",
+                    "name": "Normalized Zone 1",
+                    "polygon": [[0.1, 0.1], [0.5, 0.1], [0.5, 0.5], [0.1, 0.5]],
+                }
+            ],
+            "entry_regions": [],
+            "exit_regions": [],
+        }
+        config_path = tmp_path / "norm_zones.json"
+        with open(config_path, "w") as f:
+            json.dump(config, f)
+
+        # Initialize with frame_size=(1000, 1000)
+        zm = ZoneManager(config_path, frame_size=(1000, 1000))
+        z1 = zm.zones["norm_zone_1"]
+        assert z1.is_normalized is True
+        assert z1.polygon == [(100, 100), (500, 100), (500, 500), (100, 500)]
+
+        # Point (250, 250) is inside
+        assert "norm_zone_1" in zm.get_zones_for_point(250, 250)
+        # Point (600, 600) is outside
+        assert "norm_zone_1" not in zm.get_zones_for_point(600, 600)
+
+        # Scale to a different resolution (1920, 1080)
+        zm.scale_to_frame_size(1920, 1080)
+        assert z1.polygon == [(192, 108), (960, 108), (960, 540), (192, 540)]
+        assert "norm_zone_1" in zm.get_zones_for_point(500, 300)
+

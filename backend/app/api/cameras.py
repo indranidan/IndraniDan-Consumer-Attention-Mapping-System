@@ -22,6 +22,7 @@ from app.schemas.camera import CameraCreate, CameraUpdate, CameraResponse
 from app.schemas.auth import MessageResponse
 from app.core.dependencies import admin_or_store_manager, any_role
 from app.services import camera_service
+from app.core.cache import cache_manager, invalidate_cache_tags
 
 router = APIRouter(prefix="/api/cameras", tags=["Cameras"])
 
@@ -43,7 +44,9 @@ def create_camera(
     db: Session = Depends(get_db),
 ):
     """Create a new camera. Requires Administrator or Store Manager role."""
-    return camera_service.create_camera(db, payload)
+    result = camera_service.create_camera(db, payload)
+    invalidate_cache_tags("cameras", "dashboard")
+    return result
 
 
 @router.get(
@@ -62,12 +65,21 @@ def list_cameras(
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
-    """List all cameras. Available to all authenticated users."""
+    """List all cameras with sub-millisecond response caching. Available to all authenticated users."""
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=60"
+    cache_key = f"cameras:list:{store_id}:{zone_id}:{search}:{status}:{page}:{page_size}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        response.headers["X-Total-Count"] = str(cached.get("total", 0))
+        return cached.get("items", [])
+
     items, total = camera_service.get_cameras(
         db, store_id=store_id, zone_id=zone_id, search=search, status=status,
         page=page, page_size=page_size
     )
     response.headers["X-Total-Count"] = str(total)
+    serialized = [CameraResponse.model_validate(item).model_dump(mode="json") for item in items]
+    cache_manager.set(cache_key, {"items": serialized, "total": total}, ttl_seconds=60.0, tags=["cameras"])
     return items
 
 
@@ -79,11 +91,22 @@ def list_cameras(
 )
 def get_camera(
     camera_id: uuid.UUID,
+    response: Response,
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
     """Get a camera by its ID. Available to all authenticated users."""
-    return camera_service.get_camera_by_id(db, camera_id)
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=60"
+    cache_key = f"camera:{camera_id}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        return cached
+
+
+    camera = camera_service.get_camera_by_id(db, camera_id)
+    if camera:
+        cache_manager.set(cache_key, CameraResponse.model_validate(camera).model_dump(mode="json"), ttl_seconds=60.0, tags=["cameras"])
+    return camera
 
 
 @router.put(
@@ -102,7 +125,9 @@ def update_camera(
     db: Session = Depends(get_db),
 ):
     """Update a camera. Requires Administrator or Store Manager role."""
-    return camera_service.update_camera(db, camera_id, payload)
+    result = camera_service.update_camera(db, camera_id, payload)
+    invalidate_cache_tags("cameras", "dashboard")
+    return result
 
 
 @router.delete(
@@ -121,4 +146,33 @@ def delete_camera(
 ):
     """Delete a camera. Requires Administrator or Store Manager role."""
     camera_service.delete_camera(db, camera_id)
+    invalidate_cache_tags("cameras", "dashboard")
     return MessageResponse(message="Camera deleted successfully.")
+
+
+
+@router.post(
+    "/{camera_id}/test",
+    summary="Test live camera stream connectivity and latency",
+)
+def test_camera(
+    camera_id: uuid.UUID,
+    current_user: User = Depends(any_role),
+    db: Session = Depends(get_db),
+):
+    """Probes RTSP/HTTP or device stream connectivity with safety timeout."""
+    return camera_service.probe_camera_stream(db, camera_id)
+
+
+@router.get(
+    "/{camera_id}/snapshot",
+    summary="Capture single frame snapshot preview from camera",
+)
+def get_camera_snapshot(
+    camera_id: uuid.UUID,
+    current_user: User = Depends(any_role),
+    db: Session = Depends(get_db),
+):
+    """Captures and returns base64 image frame from camera."""
+    return camera_service.capture_camera_snapshot(db, camera_id)
+

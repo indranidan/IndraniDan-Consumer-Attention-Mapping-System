@@ -6,6 +6,8 @@ Reads paths and settings from the project-root .env file.
 Does NOT modify any existing configuration or module.
 """
 
+from typing import Any
+from typing import Optional
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -105,26 +107,29 @@ class ReportConfig:
         return self.phase5_output_path / "target_attention_summary.json"
 
 
-def load_report_config() -> ReportConfig:
+def load_report_config(base_dir: Optional[Any] = None) -> ReportConfig:
     """
-    Build a ReportConfig from environment variables.
+    Build a ReportConfig from environment variables or custom base_dir.
 
     Returns
     -------
     ReportConfig
         Fully validated, immutable configuration object.
-
-    Raises
-    ------
-    RuntimeError
-        If .env is missing or required variables are not set.
     """
     _ensure_env_loaded()
 
-    phase3 = _resolve_path(_optional_env("PHASE3_OUTPUT_PATH", "outputs/module3/phase3/reports"))
-    phase4 = _resolve_path(_optional_env("PHASE4_OUTPUT_PATH", "outputs/module3/phase4/reports"))
-    phase5 = _resolve_path(_optional_env("PHASE5_OUTPUT_PATH", "outputs/module3/phase5/reports"))
-    phase6 = _resolve_path(_optional_env("PHASE6_OUTPUT_PATH", "outputs/module3/phase6"))
+    base = base_dir or _optional_env("AI_JOB_OUTPUT_PATH") or _optional_env("OUTPUT_BASE_PATH")
+    if base:
+        base_path = _resolve_path(str(base))
+        phase3 = base_path / "phase3" / "reports"
+        phase4 = base_path / "phase4" / "reports"
+        phase5 = base_path / "phase5" / "reports"
+        phase6 = base_path / "phase6"
+    else:
+        phase3 = _resolve_path(_optional_env("PHASE3_OUTPUT_PATH", "outputs/module3/phase3/reports"))
+        phase4 = _resolve_path(_optional_env("PHASE4_OUTPUT_PATH", "outputs/module3/phase4/reports"))
+        phase5 = _resolve_path(_optional_env("PHASE5_OUTPUT_PATH", "outputs/module3/phase5/reports"))
+        phase6 = _resolve_path(_optional_env("PHASE6_OUTPUT_PATH", "outputs/module3/phase6"))
 
     report_version = _optional_env("REPORT_VERSION", "1.0")
 

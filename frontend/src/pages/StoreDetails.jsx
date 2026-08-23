@@ -7,21 +7,34 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getStoreById } from "../services/storeService";
+import { getStoreById, getZones, getShelves } from "../services/storeService";
 import StatusBadge from "../components/ui/StatusBadge";
+import StoreFloorplanMap from "../components/store/StoreFloorplanMap";
 
 export default function StoreDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [store, setStore] = useState(null);
+  const [zones, setZones] = useState([]);
+  const [shelves, setShelves] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchStore = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getStoreById(id);
-      setStore(res.data);
+      const [storeRes, zonesRes, shelvesRes] = await Promise.allSettled([
+        getStoreById(id),
+        getZones({ store_id: id }),
+        getShelves({ store_id: id }),
+      ]);
+      if (storeRes.status === "fulfilled") {
+        setStore(storeRes.value.data);
+      } else {
+        navigate("/stores");
+      }
+      if (zonesRes.status === "fulfilled") setZones(zonesRes.value.data);
+      if (shelvesRes.status === "fulfilled") setShelves(shelvesRes.value.data);
     } catch {
       navigate("/stores");
     } finally {
@@ -50,16 +63,16 @@ export default function StoreDetails() {
     { label: "State", value: store.state },
     { label: "Country", value: store.country },
     { label: "Postal Code", value: store.postal_code },
-    { label: "Zones", value: store.zone_count },
+    { label: "Zones", value: store.zone_count || zones.length },
     { label: "Cameras", value: store.camera_count },
   ];
 
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in">
+    <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-12">
       {/* Back button */}
       <button
         onClick={() => navigate("/stores")}
-        className="flex items-center gap-2 text-sm text-gray-400 hover:text-white mb-6 transition-colors"
+        className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -68,10 +81,10 @@ export default function StoreDetails() {
       </button>
 
       {/* Store Header */}
-      <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl p-6 mb-6">
+      <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-3xl p-6">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/20 flex-shrink-0">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/20 flex-shrink-0">
               <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                   d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
@@ -101,12 +114,20 @@ export default function StoreDetails() {
         </div>
       </div>
 
+      {/* ── 2D Store Floorplan Mapping ─────────────────────────────── */}
+      <StoreFloorplanMap
+        store={store}
+        zones={zones}
+        shelves={shelves}
+        onSelectShelf={(s) => navigate(`/shelves?store_id=${store.id}`)}
+      />
+
       {/* Quick Navigation */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           {
             label: "Zones",
-            count: store.zone_count,
+            count: store.zone_count || zones.length,
             path: `/zones?store_id=${store.id}`,
             gradient: "from-emerald-500 to-teal-600",
             icon: (
@@ -119,6 +140,7 @@ export default function StoreDetails() {
           },
           {
             label: "Shelves",
+            count: shelves.length,
             path: `/shelves?store_id=${store.id}`,
             gradient: "from-amber-500 to-orange-600",
             icon: (
@@ -163,7 +185,7 @@ export default function StoreDetails() {
               </div>
             </div>
             <p className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">
-              View {item.label} →
+              View {item.label} {item.count !== undefined ? `(${item.count})` : ""} →
             </p>
           </button>
         ))}
@@ -171,3 +193,4 @@ export default function StoreDetails() {
     </div>
   );
 }
+

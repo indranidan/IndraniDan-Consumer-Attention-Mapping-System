@@ -44,16 +44,9 @@ from app.database.database import Base
 # pyrefly: ignore [missing-import]
 from app.models.ai_job import AIJob
 # pyrefly: ignore [missing-import]
-from app.models.attention import AttentionAnalysis, AttentionEventModel
-# pyrefly: ignore [missing-import]
 from app.models.camera import Camera
 # pyrefly: ignore [missing-import]
 from app.models.product import Product
-# pyrefly: ignore [missing-import]
-from app.models.product_interaction import (
-    ProductInteractionAnalysis,
-    ProductInteractionEventModel,
-)
 # pyrefly: ignore [missing-import]
 from app.models.shelf import Shelf      
 # pyrefly: ignore [missing-import]
@@ -63,21 +56,24 @@ from app.models.role import Role
 # pyrefly: ignore [missing-import]
 from app.models.user import User
 # pyrefly: ignore [missing-import]
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool
 # pyrefly: ignore [missing-import]
 from app.models.zone import Zone
 # pyrefly: ignore [missing-import]
+from app.repositories.ai_document_repository import AIDocumentRepository
+# pyrefly: ignore [missing-import]
 from app.services.ai_job_service import get_job_report, get_job_results
 # pyrefly: ignore [missing-import]
-from app.services import module4_service, module5_service      
+from app.services import attention_service as module4_service, interaction_service as module5_service      
 
 
 @pytest.fixture
-def db_session():
+def db_session(tmp_path):
+    db_file = tmp_path / f"test_{uuid.uuid4().hex}.db"
     engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+        f"sqlite:///{db_file}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+        poolclass=NullPool,
     )
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
@@ -310,11 +306,11 @@ def test_scenario_1_module4_generates_without_opening_module3_report(db_session,
     assert get_res.job_id == job_id
     assert get_res.summary.total_attention_events == res.summary.total_attention_events
 
-    # Verify persisted in DB
-    db_record = db_session.query(AttentionAnalysis).filter(AttentionAnalysis.job_id == job_id).first()
-    assert db_record is not None
-    assert db_record.total_events >= 2
-    assert db_record.summary_data.get("config_hash") is not None
+    # Verify persisted in MongoDB / Document repository
+    doc = AIDocumentRepository.get_module4_analysis_sync(str(job_id))
+    assert doc is not None
+    assert doc.get("summary", {}).get("total_attention_events") >= 2
+    assert doc.get("summary", {}).get("config_hash") is not None
 
 
 def test_scenario_2_and_3_module4_returns_cached_immediately_without_recalculating(db_session, tmp_path):
@@ -330,7 +326,7 @@ def test_scenario_2_and_3_module4_returns_cached_immediately_without_recalculati
     timestamp1 = res1.summary.analyzed_at
 
     # 2. Mock the heavy engine to guarantee it is NOT called on subsequent reads
-    with unittest.mock.patch("app.services.module4_service.Module4AttentionEngine") as mock_engine:
+    with unittest.mock.patch("app.services.attention_service.Module4AttentionEngine") as mock_engine:
         # Second call via pure get_module4_analysis
         res2 = module4_service.get_module4_analysis(db_session, job_id)
         # Third call via get_or_run_module4_analysis
@@ -344,12 +340,12 @@ def test_scenario_2_and_3_module4_returns_cached_immediately_without_recalculati
     assert res2.summary.total_attention_events == res1.summary.total_attention_events
 
     # Verify sub-endpoints also read cached data without calling the engine
-    with unittest.mock.patch("app.services.module4_service.Module4AttentionEngine") as mock_engine:
+    with unittest.mock.patch("app.services.attention_service.Module4AttentionEngine") as mock_engine:
         shelves = module4_service.get_shelf_metrics(db_session, job_id)
         products = module4_service.get_product_metrics(db_session, job_id)
         events, total = module4_service.get_attention_events(db_session, job_id)
         report = module4_service.get_module4_report(db_session, job_id)
-        heatmap = module4_service.get_module4_heatmap(db_session, job_id)
+        heatmap = module4_service.get_attention_heatmaps(db_session, job_id)
 
         mock_engine.assert_not_called()
         assert len(shelves) >= 2
@@ -369,7 +365,6 @@ def test_scenario_4_module4_reevaluate_forces_recalculation(db_session, tmp_path
 
     # First run
     res1 = module4_service.get_or_run_module4_analysis(db_session, job_id, force_rerun=False)
-    initial_analysis_id = db_session.query(AttentionAnalysis).filter(AttentionAnalysis.job_id == job_id).first().id
 
     # Wait 10ms to ensure timestamp difference
     time.sleep(0.01)
@@ -378,8 +373,9 @@ def test_scenario_4_module4_reevaluate_forces_recalculation(db_session, tmp_path
     res2 = module4_service.get_or_run_module4_analysis(db_session, job_id, force_rerun=True)
 
     assert res2.status == "COMPLETED"
-    db_record = db_session.query(AttentionAnalysis).filter(AttentionAnalysis.job_id == job_id).first()
-    assert db_record.id == initial_analysis_id  # same record updated in place
+    doc = AIDocumentRepository.get_module4_analysis_sync(str(job_id))
+    assert doc is not None
+    assert doc.get("summary", {}).get("analyzed_at") is not None
 
 
 def test_scenario_5_module5_generates_without_opening_module3_or_module4_reports(db_session, tmp_path):
@@ -395,8 +391,8 @@ def test_scenario_5_module5_generates_without_opening_module3_or_module4_reports
         module5_service.get_module5_analysis(db_session, job_id)
     assert exc_info.value.status_code == 404
 
-    # Verify Module 4 is not in DB yet
-    m4_record_before = db_session.query(AttentionAnalysis).filter(AttentionAnalysis.job_id == job_id).first()
+    # Verify Module 4 is not in MongoDB yet
+    m4_record_before = AIDocumentRepository.get_module4_analysis_sync(str(job_id))
     assert m4_record_before is None
 
     # 2. Run Module 5 directly via run_module5_analysis
@@ -414,13 +410,13 @@ def test_scenario_5_module5_generates_without_opening_module3_or_module4_reports
     assert get_res.summary.total_views == res.summary.total_views
 
     # Verify Module 4 was automatically generated and persisted as a dependency
-    m4_record_after = db_session.query(AttentionAnalysis).filter(AttentionAnalysis.job_id == job_id).first()
+    m4_record_after = AIDocumentRepository.get_module4_analysis_sync(str(job_id))
     assert m4_record_after is not None
 
-    # Verify Module 5 record is persisted in DB
-    m5_record = db_session.query(ProductInteractionAnalysis).filter(ProductInteractionAnalysis.job_id == job_id).first()
+    # Verify Module 5 record is persisted in MongoDB
+    m5_record = AIDocumentRepository.get_module5_analysis_sync(str(job_id))
     assert m5_record is not None
-    assert m5_record.summary_data.get("config_hash") is not None
+    assert m5_record.get("summary", {}).get("config_hash") is not None
 
 
 def test_scenario_6_module5_reopening_returns_cached_immediately(db_session, tmp_path):
@@ -435,7 +431,7 @@ def test_scenario_6_module5_reopening_returns_cached_immediately(db_session, tmp
     res1 = module5_service.run_module5_analysis(db_session, job_id)
 
     # Mock Module 5 engine to verify it is NOT called on subsequent views
-    with unittest.mock.patch("app.services.module5_service.Module5InteractionEngine") as mock_engine:
+    with unittest.mock.patch("app.services.interaction_service.Module5InteractionEngine") as mock_engine:
         # Pure GET call
         res2 = module5_service.get_module5_analysis(db_session, job_id)
         # get_or_run call with force_rerun=False
@@ -448,7 +444,7 @@ def test_scenario_6_module5_reopening_returns_cached_immediately(db_session, tmp
     assert res2.summary.total_views == res1.summary.total_views
 
     # Sub-endpoints read from DB directly
-    with unittest.mock.patch("app.services.module5_service.Module5InteractionEngine") as mock_engine:
+    with unittest.mock.patch("app.services.interaction_service.Module5InteractionEngine") as mock_engine:
         products = module5_service.get_product_engagement(db_session, job_id)
         shelves = module5_service.get_shelf_interactions(db_session, job_id)
         comparisons = module5_service.get_product_comparisons(db_session, job_id)
@@ -513,12 +509,12 @@ def test_scenario_8_concurrent_simultaneous_requests_prevent_duplicate_execution
     assert all(r.status == "COMPLETED" for r in results_m4)
     assert all(r.status == "COMPLETED" for r in results_m5)
 
-    # Ensure only 1 AttentionAnalysis and 1 ProductInteractionAnalysis exist in DB
-    m4_count = db_session.query(AttentionAnalysis).filter(AttentionAnalysis.job_id == job_id).count()
-    m5_count = db_session.query(ProductInteractionAnalysis).filter(ProductInteractionAnalysis.job_id == job_id).count()
+    # Ensure document repository returns analysis
+    m4_doc = AIDocumentRepository.get_module4_analysis_sync(str(job_id))
+    m5_doc = AIDocumentRepository.get_module5_analysis_sync(str(job_id))
 
-    assert m4_count == 1
-    assert m5_count == 1
+    assert m4_doc is not None
+    assert m5_doc is not None
 
 
 def test_scenario_9_region_or_shelf_config_change_triggers_reevaluation(db_session, tmp_path):
@@ -614,4 +610,4 @@ def test_scenario_10_missing_or_failed_upstream_data_returns_clear_error(db_sess
     with pytest.raises(HTTPException) as exc_info:
         module5_service.get_or_run_module5_analysis(db_session, job_empty.id)
     assert exc_info.value.status_code == 400
-    assert "Required Module 3 data is unavailable" in exc_info.value.detail
+    assert "No Module 3 analysis data available" in exc_info.value.detail

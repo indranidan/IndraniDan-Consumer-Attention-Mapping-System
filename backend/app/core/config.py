@@ -16,8 +16,12 @@ class Settings(BaseSettings):
     All values have sensible defaults for local development.
     """
 
-    # ── Database ──────────────────────────────────────────────
+    # ── Database (Relational PostgreSQL) ──────────────────────
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/consumer_attention_db"
+
+    # ── Database (Document & Time-Series MongoDB) ─────────────
+    MONGODB_URL: str = "mongodb://localhost:27017"
+    MONGODB_DB_NAME: str = "consumer_attention_ai_db"
 
     # ── JWT ───────────────────────────────────────────────────
     SECRET_KEY: str = "change-this-in-production"
@@ -33,8 +37,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
     # ── AI Module ─────────────────────────────────────────────
-    AI_OUTPUT_PATH: str = "outputs/ai_jobs"
-    AI_INPUT_PATH: str = "outputs/ai_inputs"
+    AI_OUTPUT_PATH: str = "storage/outputs/ai_jobs"
+    AI_INPUT_PATH: str = "storage/uploads"
     AI_PIPELINE_TIMEOUT: int = 3600
     AI_MAX_CONCURRENT_JOBS: int = 1
     WEBCAM_DEVICE: int = 0

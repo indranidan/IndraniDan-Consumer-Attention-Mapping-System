@@ -7,7 +7,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getZones, createZone, updateZone, deleteZone, getStores } from "../services/storeService";
+import {
+  getZones,
+  createZone,
+  updateZone,
+  deleteZone,
+  getStores,
+  getSyncCachedData,
+} from "../services/storeService";
 import PageHeader from "../components/ui/PageHeader";
 import DataTable from "../components/ui/DataTable";
 import Modal from "../components/ui/Modal";
@@ -21,14 +28,24 @@ export default function Zones() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const storeIdFilter = searchParams.get("store_id") || "";
-  const [zones, setZones] = useState([]);
-  const [stores, setStores] = useState([]);
-  const [loading, setLoading] = useState(true);
+  
+  const initialParams = { page: 1, page_size: 10 };
+  if (storeIdFilter) initialParams.store_id = storeIdFilter;
+  const cachedZonesRes = getSyncCachedData("zones", JSON.stringify(initialParams));
+  const cachedStoresRes = getSyncCachedData("stores", JSON.stringify({}));
+
+  const [zones, setZones] = useState(cachedZonesRes?.data || []);
+  const [stores, setStores] = useState(cachedStoresRes?.data || []);
+  const [loading, setLoading] = useState(!cachedZonesRes);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [totalCount, setTotalCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(
+    cachedZonesRes
+      ? parseInt(cachedZonesRes?.headers?.["x-total-count"] || cachedZonesRes?.data?.length || 0, 10)
+      : 0
+  );
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingZone, setEditingZone] = useState(null);
@@ -42,7 +59,7 @@ export default function Zones() {
   const canWrite = ["Administrator", "Store Manager"].includes(userRole);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    if (!zones.length) setLoading(true);
     try {
       const params = { page, page_size: pageSize };
       if (storeIdFilter) params.store_id = storeIdFilter;
@@ -53,9 +70,15 @@ export default function Zones() {
       setStores(storesRes.data);
       const total = parseInt(zonesRes.headers["x-total-count"] || zonesRes.data.length, 10);
       setTotalCount(total);
-    } catch { setZones([]); setTotalCount(0); }
+    } catch {
+      if (!zones.length) {
+        setZones([]);
+        setTotalCount(0);
+      }
+    }
     finally { setLoading(false); }
   }, [search, storeIdFilter, filters, page, pageSize]);
+
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

@@ -124,15 +124,28 @@ class AttentionReportGenerator:
         self, tracker: AttentionTracker, session_manager=None,
     ) -> List[ShopperAttentionSummary]:
         summaries = []
-        for track_id in tracker.all_track_ids:
+        track_ids = list(tracker.all_track_ids)
+
+        if session_manager:
+            confirmed_sessions = session_manager.get_all_sessions(include_transient=False)
+            if confirmed_sessions:
+                confirmed_ids = set()
+                for s in confirmed_sessions:
+                    confirmed_ids.add(s.tracking_id)
+                    confirmed_ids.update(getattr(s, "stitched_track_ids", []))
+                filtered = [tid for tid in track_ids if tid in confirmed_ids]
+                if filtered:
+                    track_ids = filtered
+
+        for track_id in track_ids:
             events = tracker.get_events_for_track(track_id)
             stats = tracker.get_track_stats(track_id)
 
             session_duration = 0.0
             if session_manager:
                 session = session_manager.get_session(track_id)
-                if session:
-                    session_duration = session.end_time - session.start_time
+                if session and session.end_time is not None and session.start_time is not None:
+                    session_duration = max(0.0, session.end_time - session.start_time)
 
             durations = [
                 e.duration_seconds for e in events

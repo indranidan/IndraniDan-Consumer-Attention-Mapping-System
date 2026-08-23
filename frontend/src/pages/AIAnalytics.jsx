@@ -14,12 +14,12 @@ import {
   getAIJobs,
   stopAIJob,
   getAIJobResults,
+  createJobWebSocket,
 } from "../services/storeService";
 import PageHeader from "../components/ui/PageHeader";
 import Modal from "../components/ui/Modal";
-import Module5ProductInteraction from "../components/module5/Module5ProductInteraction";
-import Module4AttentionAnalytics from "../components/module4/Module4AttentionAnalytics";
-import Module3TrackingAnalytics from "../components/module3/Module3TrackingAnalytics";
+import UnifiedAIJobResultsModal from "../components/analytics/UnifiedAIJobResultsModal";
+import ZoneCanvasAnnotator from "../components/analytics/ZoneCanvasAnnotator";
 
 
 const STATUS_COLORS = {
@@ -93,6 +93,8 @@ export default function AIAnalytics() {
   const [selectedCamera, setSelectedCamera] = useState("");
   const [inputType, setInputType] = useState("VIDEO_FILE"); // "VIDEO_FILE" | "WEBCAM"
   const [selectedFile, setSelectedFile] = useState(null);
+  const [customZoneConfig, setCustomZoneConfig] = useState(null);
+  const [showZoneCalibration, setShowZoneCalibration] = useState(true);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
 
@@ -163,6 +165,11 @@ export default function AIAnalytics() {
     };
   }, [webcamStream]);
 
+  // WebSocket & Live Streaming State
+  const [liveLogs, setLiveLogs] = useState([]);
+  const [wsConnected, setWsConnected] = useState(false);
+  const terminalBottomRef = useRef(null);
+
   // Poll for active jobs
   useEffect(() => {
     const hasActive = jobs.some(
@@ -175,6 +182,46 @@ export default function AIAnalytics() {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [jobs, fetchJobs]);
+
+  // Connect WebSocket to active running job
+  const runningJob = jobs.find((j) => j.status === "RUNNING");
+  const runningJobId = runningJob?.id;
+
+  useEffect(() => {
+    if (!runningJobId) {
+      setWsConnected(false);
+      return;
+    }
+
+    let ws = null;
+    try {
+      ws = createJobWebSocket(
+        runningJobId,
+        (msg) => {
+          setWsConnected(true);
+          if (msg.type === "log" && msg.message) {
+            setLiveLogs((prev) => [...prev.slice(-150), msg.message]);
+          } else if (msg.type === "status") {
+            fetchJobs();
+          }
+        },
+        () => setWsConnected(false),
+        () => setWsConnected(false)
+      );
+    } catch (e) {
+      console.warn("WebSocket connection error:", e);
+    }
+
+    return () => {
+      if (ws) ws.close();
+    };
+  }, [runningJobId, fetchJobs]);
+
+  useEffect(() => {
+    if (terminalBottomRef.current) {
+      terminalBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [liveLogs]);
 
   const startWebcam = async () => {
     try {
@@ -257,6 +304,9 @@ export default function AIAnalytics() {
         formData.append("camera_id", selectedCamera);
         formData.append("input_type", "VIDEO_FILE");
         formData.append("file", selectedFile);
+        if (customZoneConfig) {
+          formData.append("zone_config", JSON.stringify(customZoneConfig));
+        }
 
         await createAIJob(formData);
 
@@ -264,6 +314,7 @@ export default function AIAnalytics() {
         setSelectedStore("");
         setSelectedCamera("");
         setSelectedFile(null);
+        setCustomZoneConfig(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         fetchJobs();
       } catch (err) {
@@ -293,12 +344,16 @@ export default function AIAnalytics() {
         formData.append("camera_id", selectedCamera);
         formData.append("input_type", "WEBCAM");
         formData.append("file", webcamFile);
+        if (customZoneConfig) {
+          formData.append("zone_config", JSON.stringify(customZoneConfig));
+        }
 
         await createAIJob(formData);
 
         stopWebcam();
         setSelectedStore("");
         setSelectedCamera("");
+        setCustomZoneConfig(null);
         fetchJobs();
       } catch (err) {
         setCreateError(
@@ -626,6 +681,31 @@ export default function AIAnalytics() {
             )}
           </div>
 
+          {/* Step 4: Calibrate Video Zones & Shelves (Interactive Canvas) */}
+          {(selectedFile || webcamActive) && (
+            <div className="mb-5 animate-fade-in">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-semibold text-white flex items-center gap-1.5">
+                  <span>📐</span> Step 4: Calibrate Video Zones & Shelves (Interactive Calibration)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowZoneCalibration((prev) => !prev)}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 font-medium transition-colors"
+                >
+                  {showZoneCalibration ? "Hide Calibration Canvas ▲" : "Show Calibration Canvas ▼"}
+                </button>
+              </div>
+
+              {showZoneCalibration && (
+                <ZoneCanvasAnnotator
+                  videoFile={selectedFile}
+                  onChange={(cfg) => setCustomZoneConfig(cfg)}
+                />
+              )}
+            </div>
+          )}
+
           {/* Submit Button */}
           <div className="flex justify-end">
             <button
@@ -658,6 +738,44 @@ export default function AIAnalytics() {
               {createError}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Live Stream Terminal ───────────────────────────── */}
+      {runningJob && (
+        <div className="mb-6 bg-gray-950/80 backdrop-blur-xl border border-violet-500/30 rounded-2xl p-5 shadow-2xl shadow-violet-500/5 transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              <span className="text-sm font-semibold text-white">Live Pipeline Stream</span>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30 font-mono">
+                Job #{runningJob.id.slice(0, 8)}
+              </span>
+            </div>
+            <span className="text-xs font-mono text-emerald-400 flex items-center gap-1.5 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+              <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              {wsConnected ? "WebSocket Connected" : "Connecting Live Stream..."}
+            </span>
+          </div>
+          <div className="bg-black/90 rounded-xl p-4 border border-gray-800 font-mono text-xs text-gray-300 h-44 overflow-y-auto space-y-1.5 select-text">
+            {liveLogs.length === 0 ? (
+              <p className="text-gray-500 italic flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-violet-400 animate-ping" />
+                Pipeline worker running... listening for stdout stream.
+              </p>
+            ) : (
+              liveLogs.map((log, idx) => (
+                <div key={idx} className="leading-relaxed flex items-start gap-2">
+                  <span className="text-violet-400 select-none">&gt;</span>
+                  <span className="text-gray-200 break-all">{log}</span>
+                </div>
+              ))
+            )}
+            <div ref={terminalBottomRef} />
+          </div>
         </div>
       )}
 
@@ -778,69 +896,15 @@ export default function AIAnalytics() {
         )}
       </div>
 
-      {/* ── Results Modal ────────────────────────────────── */}
-      <Modal
+      {/* ── Unified AI Job Results Modal ─────────────────── */}
+      <UnifiedAIJobResultsModal
         isOpen={resultsModal}
         onClose={() => {
           setResultsModal(false);
-          setResultsData(null);
-          setResultsTab("module5");
+          setSelectedJob(null);
         }}
-        title={`Analytics Results — ${selectedJob?.camera_name || ""}`}
-        maxWidth="max-w-5xl"
-      >
-        {/* Module Switcher Tabs */}
-        <div className="flex items-center gap-2 mb-6 border-b border-gray-800 pb-3 overflow-x-auto">
-          <button
-            type="button"
-            onClick={() => setResultsTab("module5")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
-              resultsTab === "module5"
-                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
-                : "bg-gray-800/40 text-gray-400 hover:text-white hover:bg-gray-800"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            Module 5 — Product Interaction Analysis
-          </button>
-          <button
-            type="button"
-            onClick={() => setResultsTab("module4")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
-              resultsTab === "module4"
-                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
-                : "bg-gray-800/40 text-gray-400 hover:text-white hover:bg-gray-800"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            Module 4 — Attention Analysis Engine
-          </button>
-          <button
-            type="button"
-            onClick={() => setResultsTab("module3")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
-              resultsTab === "module3"
-                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
-                : "bg-gray-800/40 text-gray-400 hover:text-white hover:bg-gray-800"
-            }`}
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            Module 3 — Tracking & Movement Analytics
-          </button>
-        </div>
-
-        {resultsTab === "module5" && (
-          <Module5ProductInteraction jobId={selectedJob?.id} job={selectedJob} />
-        )}
-        {resultsTab === "module4" && (
-          <Module4AttentionAnalytics jobId={selectedJob?.id} job={selectedJob} />
-        )}
-        {resultsTab === "module3" && (
-          <Module3TrackingAnalytics jobId={selectedJob?.id} job={selectedJob} resultsData={resultsData} />
-        )}
-      </Modal>
+        job={selectedJob}
+      />
 
 
       {/* ── Error Modal ──────────────────────────────────── */}

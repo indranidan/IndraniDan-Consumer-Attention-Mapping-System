@@ -31,18 +31,18 @@ if str(_BACKEND_DIR) not in sys.path:
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from app.module4.engine import Module4AttentionEngine
+from app.modules.attention.engine import Module4AttentionEngine
 
-from app.module4.event_detector import Module4AttentionEventDetector
-from app.module4.gaze_estimator import Module4GazeEstimator
-from app.module4.head_pose import Module4HeadPoseEstimator
-from app.module4.heatmap_generator import Module4HeatmapGenerator
-from app.module4.metrics import (
+from app.modules.attention.event_detector import Module4AttentionEventDetector
+from app.modules.attention.gaze_estimator import Module4GazeEstimator
+from app.modules.attention.head_pose import Module4HeadPoseEstimator
+from app.modules.attention.heatmap_generator import Module4HeatmapGenerator
+from app.modules.attention.metrics import (
     calculate_shelf_engagement_score,
     compute_product_metrics,
     compute_shelf_metrics,
 )
-from app.module4.models import (
+from app.modules.attention.models import (
     AttentionDirection,
     AttentionEventRecord,
     AttentionQualityMetrics,
@@ -54,9 +54,9 @@ from app.module4.models import (
     ProductAttention,
     ShelfEngagement,
 )
-from app.module4.product_attention import Module4ProductAttentionDetector
-from app.module4.report_generator import Module4ReportGenerator
-from app.module4.shelf_engagement import Module4ShelfEngagementAnalyzer
+from app.modules.attention.product_attention import Module4ProductAttentionDetector
+from app.modules.attention.report_generator import Module4ReportGenerator
+from app.modules.attention.shelf_engagement import Module4ShelfEngagementAnalyzer
 
 
 # ── TEST 1: Completed Module 3 Ingestion without YOLO Rerun ───────

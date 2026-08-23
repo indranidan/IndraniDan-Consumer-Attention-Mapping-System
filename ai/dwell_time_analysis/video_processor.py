@@ -117,6 +117,8 @@ class DwellVideoProcessor:
                 f"Video opened: {self.width}x{self.height} @ {self.fps:.1f} FPS | "
                 f"Frames: {self.total_frames:,} | Duration: {self.duration_sec:.1f}s"
             )
+        if self.width > 0 and self.height > 0:
+            self.zone_manager.scale_to_frame_size(self.width, self.height)
 
     def close(self) -> None:
         """Release video capture resources."""
@@ -192,20 +194,22 @@ class DwellVideoProcessor:
                 for track in active_tracks:
                     tid = track.track_id
                     cx, cy = track.center
+                    foot_x = cx
+                    foot_y = int(track.bbox[3])
                     current_active_ids.add(tid)
 
                     # Path tracking
                     if self.config.movement_config.path_tracking_enabled:
                         self.path_tracker.update(tid, frame_number, timestamp, cx, cy)
 
-                    # Spatial Zone detection (Phase 3)
+                    # Spatial Zone detection (Phase 3 - ground contact point)
                     current_zone_ids = []
                     if self.config.movement_config.zone_tracking_enabled:
-                        current_zone_ids = self.zone_tracker.update(tid, frame_number, timestamp, cx, cy)
+                        current_zone_ids = self.zone_tracker.update(tid, frame_number, timestamp, foot_x, foot_y)
 
-                    # Entry/exit monitoring (Phase 3)
+                    # Entry/exit monitoring (Phase 3 - ground contact point)
                     if self.config.movement_config.entry_exit_enabled:
-                        self.entry_exit_monitor.update(tid, frame_number, timestamp, cx, cy)
+                        self.entry_exit_monitor.update(tid, frame_number, timestamp, foot_x, foot_y)
 
                     # Dwell-time tracking (Phase 4)
                     if self.config.dwell_time_enabled and self.config.movement_config.zone_tracking_enabled:
@@ -218,8 +222,15 @@ class DwellVideoProcessor:
                             confidence=track.confidence,
                         )
 
-                    # Session update (Phase 3)
-                    self.session_manager.update_session(tid, frame_number, timestamp, track.confidence)
+                    # Session update (Phase 3 - with spatial-temporal position for trajectory stitching)
+                    self.session_manager.update_session(
+                        track_id=tid,
+                        frame=frame_number,
+                        timestamp=timestamp,
+                        confidence=track.confidence,
+                        position=(foot_x, foot_y),
+                        bbox=track.bbox,
+                    )
 
                     # Visualization: path trail
                     if self.config.movement_config.path_tracking_enabled:
@@ -315,6 +326,15 @@ class DwellVideoProcessor:
             entry_exit_monitor=self.entry_exit_monitor,
         )
 
+        # Finalize sessions with minimum lifetime noise filtering
+        min_cutoff = getattr(self.config.movement_config.tracking_config, "min_track_frames", 15)
+        self.session_manager.finalize_all(
+            self.path_tracker,
+            self.zone_tracker,
+            self.entry_exit_monitor,
+            min_frames=min_cutoff,
+        )
+
         processing_stats = {
             "video_filename": Path(self.source).name,
             "video_path": str(Path(self.source).resolve()),
@@ -322,7 +342,7 @@ class DwellVideoProcessor:
             "video_resolution": f"{self.width}x{self.height}",
             "video_fps": round(self.fps, 2),
             "total_frames_processed": frame_number,
-            "total_unique_shoppers": self.tracker.total_unique_tracks,
+            "total_unique_shoppers": self.session_manager.get_confirmed_count() or self.tracker.confirmed_unique_tracks,
             "total_entries": self.entry_exit_monitor.total_entries,
             "total_exits": self.entry_exit_monitor.total_exits,
             "total_track_lost": self.entry_exit_monitor.total_track_lost,

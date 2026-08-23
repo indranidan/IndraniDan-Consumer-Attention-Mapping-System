@@ -32,6 +32,10 @@ class AIJobCreate(BaseModel):
         max_length=500,
         description="Optional override for the video source path or camera index",
     )
+    zone_config: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional calibrated zone configuration for the video",
+    )
 
 
 class AIJobResponse(BaseModel):
@@ -48,6 +52,7 @@ class AIJobResponse(BaseModel):
     error_message: str | None
     output_path: str | None
     summary: dict[str, Any] | None
+    zone_config: dict[str, Any] | None = None
     created_by: uuid.UUID
     created_at: datetime
     updated_at: datetime

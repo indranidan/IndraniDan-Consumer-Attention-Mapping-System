@@ -115,6 +115,8 @@ class MovementVideoProcessor:
                 f"Video opened: {self.width}x{self.height} @ {self.fps:.1f} FPS | "
                 f"Frames: {self.total_frames:,} | Duration: {self.duration_sec:.1f}s"
             )
+        if self.width > 0 and self.height > 0:
+            self.zone_manager.scale_to_frame_size(self.width, self.height)
 
     def close(self) -> None:
         if self.cap and self.cap.isOpened():
@@ -196,23 +198,32 @@ class MovementVideoProcessor:
                 for track in active_tracks:
                     tid = track.track_id
                     cx, cy = track.center
+                    foot_x = cx
+                    foot_y = int(track.bbox[3])
                     current_active_ids.add(tid)
 
                     # Path tracking
                     if self.config.path_tracking_enabled:
                         self.path_tracker.update(tid, frame_number, timestamp, cx, cy)
 
-                    # Zone tracking
+                    # Zone tracking (ground contact point)
                     current_zones = []
                     if self.config.zone_tracking_enabled:
-                        current_zones = self.zone_tracker.update(tid, frame_number, timestamp, cx, cy)
+                        current_zones = self.zone_tracker.update(tid, frame_number, timestamp, foot_x, foot_y)
 
-                    # Entry/exit monitoring
+                    # Entry/exit monitoring (ground contact point)
                     if self.config.entry_exit_enabled:
-                        self.entry_exit_monitor.update(tid, frame_number, timestamp, cx, cy)
+                        self.entry_exit_monitor.update(tid, frame_number, timestamp, foot_x, foot_y)
 
-                    # Session update
-                    self.session_manager.update_session(tid, frame_number, timestamp, track.confidence)
+                    # Session update (with spatial-temporal position for trajectory stitching)
+                    self.session_manager.update_session(
+                        track_id=tid,
+                        frame=frame_number,
+                        timestamp=timestamp,
+                        confidence=track.confidence,
+                        position=(foot_x, foot_y),
+                        bbox=track.bbox,
+                    )
 
                     # Visualization: path
                     if self.config.path_tracking_enabled:
@@ -309,6 +320,15 @@ class MovementVideoProcessor:
         # Generate traffic stats
         traffic_stats = traffic_analyzer.generate_stats()
 
+        # Finalize sessions with minimum lifetime noise filtering
+        min_cutoff = getattr(self.config.tracking_config, "min_track_frames", 15)
+        self.session_manager.finalize_all(
+            self.path_tracker,
+            self.zone_tracker,
+            self.entry_exit_monitor,
+            min_frames=min_cutoff,
+        )
+
         session_stats = {
             "video_filename": Path(self.source).name,
             "video_path": str(Path(self.source).resolve()),
@@ -316,7 +336,7 @@ class MovementVideoProcessor:
             "video_resolution": f"{self.width}x{self.height}",
             "video_fps": round(self.fps, 2),
             "total_frames_processed": frame_number,
-            "total_unique_shoppers": self.tracker.total_unique_tracks,
+            "total_unique_shoppers": self.session_manager.get_confirmed_count() or self.tracker.confirmed_unique_tracks,
             "total_entries": self.entry_exit_monitor.total_entries,
             "total_exits": self.entry_exit_monitor.total_exits,
             "total_track_lost": self.entry_exit_monitor.total_track_lost,
