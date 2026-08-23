@@ -50,7 +50,13 @@ class PersonDetectionConfig:
 
 def _resolve_model_path(raw_path: str) -> Path:
     """
-    Resolve a model path that may be relative to the project root.
+    Resolve a model path that may be relative to the project root or CWD.
+
+    Searches across standard canonical model directories:
+      1. Exact path (if absolute and exists)
+      2. Direct relative path to project root or current working directory
+      3. Candidate model folders (ai/models, ai, ai/coco)
+      4. Standard COCO model fallbacks if specific model filename is missing
 
     Parameters
     ----------
@@ -63,14 +69,46 @@ def _resolve_model_path(raw_path: str) -> Path:
         Resolved absolute path.
     """
     path = Path(raw_path)
-    if not path.is_absolute():
-        resolved = CONFIG_PROJECT_ROOT / path
-        if not resolved.exists():
-            models_fallback = CONFIG_PROJECT_ROOT / "ai" / "models" / path.name
-            if models_fallback.exists():
-                return models_fallback
+
+    # 1. If absolute and exists, return immediately
+    if path.is_absolute() and path.exists():
+        return path
+
+    # 2. Check relative to project root
+    resolved = CONFIG_PROJECT_ROOT / path
+    if resolved.exists():
         return resolved
-    return path
+
+    # 3. Check relative to CWD
+    cwd_resolved = Path.cwd() / path
+    if cwd_resolved.exists():
+        return cwd_resolved.resolve()
+
+    # 4. Search candidate directories for the specified filename
+    filename = path.name
+    candidate_dirs = [
+        CONFIG_PROJECT_ROOT / "ai" / "models",
+        CONFIG_PROJECT_ROOT / "ai",
+        CONFIG_PROJECT_ROOT / "ai" / "coco",
+        Path.cwd() / "ai" / "models",
+        Path.cwd() / "ai",
+        Path.cwd() / "ai" / "coco",
+    ]
+
+    for cdir in candidate_dirs:
+        candidate_file = cdir / filename
+        if candidate_file.exists():
+            return candidate_file.resolve()
+
+    # 5. Search for alternative COCO-pretrained person detection models
+    default_models = ["yolo26n.pt", "yolov8n.pt", "yolov8s.pt", "yolov8m.pt"]
+    for def_name in default_models:
+        for cdir in candidate_dirs:
+            candidate_file = cdir / def_name
+            if candidate_file.exists():
+                return candidate_file.resolve()
+
+    return resolved
 
 
 def load_person_detection_config() -> PersonDetectionConfig:

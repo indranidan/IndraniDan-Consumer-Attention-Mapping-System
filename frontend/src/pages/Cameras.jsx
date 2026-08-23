@@ -73,10 +73,13 @@ export default function Cameras() {
       if (search) params.search = search;
       Object.entries(filters).forEach(([key, val]) => { if (val) params[key] = val; });
       const [camerasRes, storesRes] = await Promise.all([getCameras(params), getStores()]);
-      setCameras(camerasRes.data);
-      setStores(storesRes.data);
-      const total = parseInt(camerasRes.headers["x-total-count"] || camerasRes.data.length, 10);
-      setTotalCount(total);
+      const cameraItems = Array.isArray(camerasRes?.data) ? camerasRes.data : (camerasRes?.data?.items || []);
+      const storeItems = Array.isArray(storesRes?.data) ? storesRes.data : (storesRes?.data?.items || []);
+      setCameras(cameraItems);
+      setStores(storeItems);
+      const headerTotal = camerasRes?.headers?.["x-total-count"] || camerasRes?.headers?.["X-Total-Count"];
+      const total = headerTotal !== undefined && headerTotal !== null ? parseInt(headerTotal, 10) : cameraItems.length;
+      setTotalCount(isNaN(total) ? cameraItems.length : total);
     } catch {
       if (!cameras.length) {
         setCameras([]);

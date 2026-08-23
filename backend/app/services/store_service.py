@@ -8,7 +8,7 @@ Handles validation, uniqueness checks, and database operations.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from fastapi import HTTPException, status
 
 from app.models.store import Store
@@ -125,7 +125,10 @@ def get_stores(
     if page is not None and page_size is not None:
         query = query.offset((page - 1) * page_size).limit(page_size)
 
-    stores = query.all()
+    stores = query.options(
+        selectinload(Store.zones),
+        selectinload(Store.cameras),
+    ).all()
     return [_to_response(s) for s in stores], total
 
 

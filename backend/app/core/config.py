@@ -10,6 +10,12 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+from pathlib import Path
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_ROOT_DIR = _BACKEND_DIR.parent
+
+
 class Settings(BaseSettings):
     """
     Central configuration loaded from .env file.
@@ -34,7 +40,7 @@ class Settings(BaseSettings):
 
     # ── Application ───────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:5173"
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
 
     # ── AI Module ─────────────────────────────────────────────
     AI_OUTPUT_PATH: str = "storage/outputs/ai_jobs"
@@ -45,7 +51,11 @@ class Settings(BaseSettings):
 
     # ── Pydantic Settings Config ──────────────────────────────
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            str(_ROOT_DIR / ".env"),
+            str(_BACKEND_DIR / ".env"),
+            ".env",
+        ),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",

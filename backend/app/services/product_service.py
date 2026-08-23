@@ -7,7 +7,7 @@ Business logic for product CRUD operations.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 
 from app.models.product import Product
@@ -136,7 +136,11 @@ def get_products(
     if page is not None and page_size is not None:
         query = query.offset((page - 1) * page_size).limit(page_size)
 
-    products = query.all()
+    products = query.options(
+        joinedload(Product.store),
+        joinedload(Product.zone),
+        joinedload(Product.shelf),
+    ).all()
     return [_to_response(p) for p in products], total
 
 
