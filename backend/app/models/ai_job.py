@@ -11,7 +11,7 @@ from app.models import Camera
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import String, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import String, DateTime, ForeignKey, Text, JSON, Index, desc
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.database import Base
@@ -31,6 +31,10 @@ class AIJob(Base):
     """
 
     __tablename__ = "ai_jobs"
+    __table_args__ = (
+        Index("ix_ai_jobs_status_completed_at", "status", desc("completed_at")),
+        Index("ix_ai_jobs_status_created_at", "status", desc("created_at")),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True,
@@ -91,6 +95,11 @@ class AIJob(Base):
         JSON,
         nullable=True,
         comment="Compact analytics summary JSON after completion",
+    )
+    zone_config: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Custom calibrated video zones and regions JSON",
     )
     created_by: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"),

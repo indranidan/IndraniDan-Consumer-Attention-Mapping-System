@@ -23,6 +23,7 @@ from app.schemas.auth import MessageResponse
 from app.middleware.jwt_auth import get_current_user
 from app.core.dependencies import admin_or_store_manager, any_role
 from app.services import zone_service
+from app.core.cache import cache_manager, invalidate_cache_tags
 
 router = APIRouter(prefix="/api/zones", tags=["Zones"])
 
@@ -45,7 +46,9 @@ def create_zone(
     db: Session = Depends(get_db),
 ):
     """Create a new zone within a store. Requires Administrator or Store Manager role."""
-    return zone_service.create_zone(db, payload)
+    result = zone_service.create_zone(db, payload)
+    invalidate_cache_tags("zones", "dashboard")
+    return result
 
 
 @router.get(
@@ -63,11 +66,20 @@ def list_zones(
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
-    """List all zones. Available to all authenticated users."""
+    """List all zones with sub-millisecond response caching. Available to all authenticated users."""
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=60"
+    cache_key = f"zones:list:{store_id}:{search}:{name}:{page}:{page_size}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        response.headers["X-Total-Count"] = str(cached.get("total", 0))
+        return cached.get("items", [])
+
     items, total = zone_service.get_zones(
         db, store_id=store_id, search=search, name=name, page=page, page_size=page_size
     )
     response.headers["X-Total-Count"] = str(total)
+    serialized = [ZoneResponse.model_validate(item).model_dump(mode="json") for item in items]
+    cache_manager.set(cache_key, {"items": serialized, "total": total}, ttl_seconds=60.0, tags=["zones"])
     return items
 
 
@@ -79,11 +91,22 @@ def list_zones(
 )
 def get_zone(
     zone_id: uuid.UUID,
+    response: Response,
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
     """Get a zone by its ID. Available to all authenticated users."""
-    return zone_service.get_zone_by_id(db, zone_id)
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=60"
+    cache_key = f"zone:{zone_id}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        return cached
+
+
+    zone = zone_service.get_zone_by_id(db, zone_id)
+    if zone:
+        cache_manager.set(cache_key, ZoneResponse.model_validate(zone).model_dump(mode="json"), ttl_seconds=60.0, tags=["zones"])
+    return zone
 
 
 @router.put(
@@ -102,7 +125,9 @@ def update_zone(
     db: Session = Depends(get_db),
 ):
     """Update a zone. Requires Administrator or Store Manager role."""
-    return zone_service.update_zone(db, zone_id, payload)
+    result = zone_service.update_zone(db, zone_id, payload)
+    invalidate_cache_tags("zones", "dashboard")
+    return result
 
 
 @router.delete(
@@ -121,4 +146,6 @@ def delete_zone(
 ):
     """Delete a zone and all its shelves and products. Requires Administrator or Store Manager role."""
     zone_service.delete_zone(db, zone_id)
+    invalidate_cache_tags("zones", "shelves", "products", "dashboard")
     return MessageResponse(message="Zone deleted successfully.")
+

@@ -7,13 +7,22 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getShelves, createShelf, updateShelf, deleteShelf, getStores, getZones } from "../services/storeService";
+import {
+  getShelves,
+  createShelf,
+  updateShelf,
+  deleteShelf,
+  getStores,
+  getZones,
+  getSyncCachedData,
+} from "../services/storeService";
 import PageHeader from "../components/ui/PageHeader";
 import DataTable from "../components/ui/DataTable";
 import Modal from "../components/ui/Modal";
 import FormField from "../components/ui/FormField";
 import DeleteConfirm from "../components/ui/DeleteConfirm";
 import FilterPanel from "../components/ui/FilterPanel";
+import StoreFloorplanMap from "../components/store/StoreFloorplanMap";
 
 const emptyFilters = { store_id: "", zone_id: "", category: "", shelf_code: "" };
 
@@ -21,16 +30,28 @@ export default function Shelves() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const storeIdFilter = searchParams.get("store_id") || "";
-  const [shelves, setShelves] = useState([]);
-  const [stores, setStores] = useState([]);
-  const [zones, setZones] = useState([]);
+
+  const initialParams = { page: 1, page_size: 10 };
+  if (storeIdFilter) initialParams.store_id = storeIdFilter;
+  const cachedShelvesRes = getSyncCachedData("shelves", JSON.stringify(initialParams));
+  const cachedStoresRes = getSyncCachedData("stores", JSON.stringify({}));
+  const cachedZonesRes = getSyncCachedData("zones", JSON.stringify(storeIdFilter ? { store_id: storeIdFilter } : {}));
+
+  const [shelves, setShelves] = useState(cachedShelvesRes?.data || []);
+  const [stores, setStores] = useState(cachedStoresRes?.data || []);
+  const [zones, setZones] = useState(cachedZonesRes?.data || []);
   const [filterZones, setFilterZones] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedShelvesRes);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [totalCount, setTotalCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(
+    cachedShelvesRes
+      ? parseInt(cachedShelvesRes?.headers?.["x-total-count"] || cachedShelvesRes?.data?.length || 0, 10)
+      : 0
+  );
+  const [viewTab, setViewTab] = useState("table"); // table | floorplan
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingShelf, setEditingShelf] = useState(null);
@@ -44,19 +65,30 @@ export default function Shelves() {
   const canWrite = ["Administrator", "Store Manager"].includes(userRole);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    if (!shelves.length) setLoading(true);
     try {
       const params = { page, page_size: pageSize };
       if (storeIdFilter) params.store_id = storeIdFilter;
       if (search) params.search = search;
       Object.entries(filters).forEach(([key, val]) => { if (val) params[key] = val; });
-      const [shelvesRes, storesRes] = await Promise.all([getShelves(params), getStores()]);
+      const [shelvesRes, storesRes, allZonesRes] = await Promise.all([
+        getShelves(params),
+        getStores(),
+        getZones(storeIdFilter ? { store_id: storeIdFilter } : {}),
+      ]);
       setShelves(shelvesRes.data);
       setStores(storesRes.data);
+      setZones(allZonesRes.data);
       const total = parseInt(shelvesRes.headers["x-total-count"] || shelvesRes.data.length, 10);
       setTotalCount(total);
-    } catch { setShelves([]); setTotalCount(0); }
-    finally { setLoading(false); }
+    } catch {
+      if (!shelves.length) {
+        setShelves([]);
+        setTotalCount(0);
+      }
+    } finally {
+      setLoading(false);
+    }
   }, [search, storeIdFilter, filters, page, pageSize]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -119,20 +151,52 @@ export default function Shelves() {
     finally { setDeleting(false); }
   };
 
-  return (
-    <div className="max-w-6xl mx-auto animate-fade-in">
-      <PageHeader title="Shelves" description="Manage shelving units within store zones"
-        actionLabel="Add Shelf" onAction={openCreate} showAction={canWrite}
-        icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>}
-      />
+  const currentStoreObj = stores.find((s) => s.id === (filters.store_id || storeIdFilter)) || stores[0];
 
-      <DataTable columns={canWrite ? ["Shelf", "Code", "Zone", "Store", "Category", "Products", "Actions"] : ["Shelf", "Code", "Zone", "Store", "Category", "Products"]}
-        data={shelves} loading={loading} searchValue={search} onSearchChange={handleSearchChange}
-        searchPlaceholder="Search shelves..." emptyTitle="No shelves found"
-        page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={setPage} onPageSizeChange={handlePageSizeChange}
-        filterSlot={<FilterPanel filters={filterConfig} values={filters} onChange={handleFilterChange} onReset={handleFilterReset} />}
-        renderRow={(shelf) => (
-          <tr key={shelf.id} className="hover:bg-gray-800/30 transition-colors">
+  return (
+    <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-12">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <PageHeader title="Shelves" description="Manage shelving units within store zones"
+          actionLabel="Add Shelf" onAction={openCreate} showAction={canWrite}
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>}
+        />
+
+        {/* View Switcher */}
+        <div className="flex items-center bg-gray-900/80 p-1.5 rounded-2xl border border-gray-800 text-xs">
+          <button
+            onClick={() => setViewTab("table")}
+            className={`px-3 py-1.5 rounded-xl font-medium transition-all ${
+              viewTab === "table" ? "bg-violet-600 text-white shadow-lg" : "text-gray-400 hover:text-white"
+            }`}
+          >
+            📋 Table View
+          </button>
+          <button
+            onClick={() => setViewTab("floorplan")}
+            className={`px-3 py-1.5 rounded-xl font-medium transition-all ${
+              viewTab === "floorplan" ? "bg-violet-600 text-white shadow-lg" : "text-gray-400 hover:text-white"
+            }`}
+          >
+            🏬 2D Floorplan Map
+          </button>
+        </div>
+      </div>
+
+      {viewTab === "floorplan" ? (
+        <StoreFloorplanMap
+          store={currentStoreObj}
+          zones={zones}
+          shelves={shelves}
+          onSelectShelf={(s) => openEdit(s)}
+        />
+      ) : (
+        <DataTable columns={canWrite ? ["Shelf", "Code", "Zone", "Store", "Category", "Products", "Actions"] : ["Shelf", "Code", "Zone", "Store", "Category", "Products"]}
+          data={shelves} loading={loading} searchValue={search} onSearchChange={handleSearchChange}
+          searchPlaceholder="Search shelves..." emptyTitle="No shelves found"
+          page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={setPage} onPageSizeChange={handlePageSizeChange}
+          filterSlot={<FilterPanel filters={filterConfig} values={filters} onChange={handleFilterChange} onReset={handleFilterReset} />}
+          renderRow={(shelf) => (
+            <tr key={shelf.id} className="hover:bg-gray-800/30 transition-colors">
             <td className="px-5 py-4"><p className="text-sm font-medium text-white">{shelf.name}</p></td>
             <td className="px-5 py-4"><span className="inline-flex px-2 py-0.5 rounded-md bg-gray-800/50 text-xs font-mono text-violet-400">{shelf.shelf_code}</span></td>
             <td className="px-5 py-4"><span className="text-sm text-gray-300">{shelf.zone_name || "—"}</span></td>
@@ -154,6 +218,7 @@ export default function Shelves() {
           </tr>
         )}
       />
+      )}
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingShelf ? "Edit Shelf" : "Create Shelf"} maxWidth="max-w-xl">
         <form onSubmit={handleSubmit} className="space-y-4">

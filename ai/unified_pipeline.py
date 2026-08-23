@@ -26,6 +26,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 # pyrefly: ignore [missing-import]
 import cv2
+# pyrefly: ignore [missing-import]
 import numpy as np
 
 # Ensure project root is in sys.path
@@ -69,15 +70,24 @@ from ai.person_tracking.report import TrackingReportGenerator as Phase2ReportGen
 from ai.movement_analysis.report import MovementReportGenerator as Phase3ReportGenerator
 from ai.dwell_time_analysis.report import DwellReportGenerator as Phase4ReportGenerator
 from ai.attention_analysis.report import AttentionReportGenerator as Phase5ReportGenerator
-from ai.generate_attention_report import main as run_phase6_report
+from ai.attention_report import run_phase6_report
 
 
 class UnifiedPipelineProcessor:
     """Executes single-pass video processing across all Module 3 AI phases."""
 
-    def __init__(self, config: AttentionAnalysisConfig, source: str, logger: Optional[logging.Logger] = None):
+    def __init__(
+        self,
+        config: AttentionAnalysisConfig,
+        source: str,
+        zones_path: Optional[str] = None,
+        attention_regions_path: Optional[str] = None,
+        logger: Optional[logging.Logger] = None,
+    ):
         self.config = config
         self.source = source
+        self.zones_path = zones_path
+        self.attention_regions_path = attention_regions_path
         self.logger = logger or setup_logger("unified_pipeline")
         self.profiler = PipelineProfiler(logger=self.logger)
 
@@ -92,6 +102,7 @@ class UnifiedPipelineProcessor:
                 raw_base = str(attn_path)
         
         self.output_dir = Path(raw_base)
+        self.base_output_dir = self.output_dir
 
         p1_env = os.getenv("PHASE1_OUTPUT_PATH")
         self.p1_dir = Path(p1_env).parent if p1_env and Path(p1_env).name == "reports" else (Path(p1_env) if p1_env else self.output_dir / "phase1")
@@ -139,9 +150,13 @@ class UnifiedPipelineProcessor:
         tracking_cfg = mvmt_cfg.tracking_config
         detection_cfg = tracking_cfg.detection_config
 
+        # Custom or default zone & attention region configuration paths
+        zones_config_file = Path(self.zones_path) if self.zones_path else mvmt_cfg.zone_config_path
+        attn_regions_file = Path(self.attention_regions_path) if self.attention_regions_path else self.config.attention_regions_path
+
         self.detector = PersonDetector(detection_cfg, logger=self.logger)
         self.tracker = PersonTracker(tracking_cfg, logger=self.logger)
-        self.zone_manager = ZoneManager(mvmt_cfg.zone_config_path, logger=self.logger)
+        self.zone_manager = ZoneManager(zones_config_file, logger=self.logger)
         self.path_tracker = PathTracker(history_length=mvmt_cfg.path_history_length)
         self.zone_tracker = ZoneTracker(zone_manager=self.zone_manager, logger=self.logger)
         self.entry_exit_monitor = EntryExitMonitor(zone_manager=self.zone_manager, logger=self.logger)
@@ -154,7 +169,7 @@ class UnifiedPipelineProcessor:
         )
         self.attention_classifier = AttentionClassifier()
         self.temporal_smoother = TemporalSmoother(window_size=self.config.attention_smoothing_window)
-        self.region_manager = AttentionRegionManager(config_path=self.config.attention_regions_path, logger=self.logger)
+        self.region_manager = AttentionRegionManager(config_path=attn_regions_file, logger=self.logger)
         self.attention_tracker = AttentionTracker(min_duration=self.config.attention_min_duration, logger=self.logger)
         self.visualizer = AttentionVisualizer()
 
@@ -201,6 +216,11 @@ class UnifiedPipelineProcessor:
 
         self.logger.info(f"Video Source : {self.source} ({self.width}x{self.height} @ {self.fps:.1f} FPS, {self.total_frames} frames)")
         self.logger.info(f"Primary Output Video: {p5_video_path}")
+
+        # Scale zones and attention regions to actual video resolution
+        if self.width > 0 and self.height > 0:
+            self.zone_manager.scale_to_frame_size(self.width, self.height)
+            self.region_manager.scale_to_frame_size(self.width, self.height)
 
         # Tracking state accumulators across phases
         zone_names_map = {z.id: z.name for z in self.zone_manager.get_all_zones()}
@@ -308,6 +328,8 @@ class UnifiedPipelineProcessor:
                 for track in active_tracks:
                     tid = track.track_id
                     cx, cy = track.center
+                    foot_x = cx
+                    foot_y = int(track.bbox[3])
                     current_active_ids.add(tid)
 
                     # Phase 3: Path / Zone / Entry-Exit
@@ -316,10 +338,10 @@ class UnifiedPipelineProcessor:
 
                     current_zone_ids = []
                     if mvmt_cfg.zone_tracking_enabled:
-                        current_zone_ids = self.zone_tracker.update(tid, frame_number, timestamp, cx, cy)
+                        current_zone_ids = self.zone_tracker.update(tid, frame_number, timestamp, foot_x, foot_y)
 
                     if mvmt_cfg.entry_exit_enabled:
-                        self.entry_exit_monitor.update(tid, frame_number, timestamp, cx, cy)
+                        self.entry_exit_monitor.update(tid, frame_number, timestamp, foot_x, foot_y)
 
                     # Phase 4: Dwell-Time
                     if dwell_cfg.dwell_time_enabled and mvmt_cfg.zone_tracking_enabled:
@@ -332,8 +354,15 @@ class UnifiedPipelineProcessor:
                             confidence=track.confidence,
                         )
 
-                    # Phase 3: Session Manager
-                    self.session_manager.update_session(tid, frame_number, timestamp, track.confidence)
+                    # Phase 3: Session Manager (with spatial-temporal position for trajectory stitching)
+                    self.session_manager.update_session(
+                        track_id=tid,
+                        frame=frame_number,
+                        timestamp=timestamp,
+                        confidence=track.confidence,
+                        position=(foot_x, foot_y),
+                        bbox=track.bbox,
+                    )
 
                     # Phase 5: Attention / Head Pose Estimation
                     should_process_face = (frame_number % process_interval == 0)
@@ -553,7 +582,8 @@ class UnifiedPipelineProcessor:
             "video_fps": self.fps,
             "total_frames_processed": frame_number,
             "total_person_detections": p1_total_detections,
-            "total_unique_tracking_ids": self.tracker.total_unique_tracks,
+            "total_unique_tracking_ids": self.tracker.confirmed_unique_tracks,
+            "raw_unique_tracking_ids": self.tracker.total_unique_tracks,
             "max_simultaneous_tracked_people": self.tracker.max_simultaneous_tracks,
             "average_active_tracks": round(self.tracker.average_active_tracks, 2),
             "average_tracking_confidence": round(p1_avg_conf, 4),
@@ -574,6 +604,15 @@ class UnifiedPipelineProcessor:
             p2_stats, self.tracker.track_history, frame_tracking_records
         )
 
+        # Finalize sessions with minimum lifetime noise filtering
+        min_cutoff = getattr(self.config.dwell_config.movement_config.tracking_config, "min_track_frames", 15)
+        self.session_manager.finalize_all(
+            self.path_tracker,
+            self.zone_tracker,
+            self.entry_exit_monitor,
+            min_frames=min_cutoff,
+        )
+
         # Phase 3 Report
         self.traffic_analyzer = TrafficAnalyzer(
             zone_manager=self.zone_manager,
@@ -584,6 +623,7 @@ class UnifiedPipelineProcessor:
             logger=self.logger,
         )
         traffic_stats = self.traffic_analyzer.generate_stats()
+        confirmed_shoppers = self.session_manager.get_confirmed_count() or self.tracker.confirmed_unique_tracks
         p3_stats = {
             "video_filename": Path(source_str).name,
             "video_resolution": f"{self.width}x{self.height}",
@@ -597,7 +637,7 @@ class UnifiedPipelineProcessor:
             "device": "cpu",
             "model": str(self.config.dwell_config.movement_config.tracking_config.detection_config.person_model_path),
             "tracker": "ByteTrack",
-            "total_unique_shoppers": self.tracker.total_unique_tracks,
+            "total_unique_shoppers": confirmed_shoppers,
             "total_entries": self.entry_exit_monitor.total_entries,
             "total_exits": self.entry_exit_monitor.total_exits,
             "total_track_lost": self.entry_exit_monitor.total_track_lost,
@@ -637,7 +677,7 @@ class UnifiedPipelineProcessor:
             "total_frames_processed": frame_number,
             "processing_fps": round(effective_fps, 2),
             "device": "cpu",
-            "total_unique_shoppers": self.tracker.total_unique_tracks,
+            "total_unique_shoppers": confirmed_shoppers,
             "output_video": str(p5_video_path),
         }
         p5_report_gen = Phase5ReportGenerator(self.p5_dir / "reports", logger=self.logger)
@@ -660,7 +700,7 @@ class UnifiedPipelineProcessor:
         # Phase 6: Attention Reports & Analytics Aggregation
         # ──────────────────────────────────────────────────────────
         self.logger.info("Executing Phase 6: Attention Report Generator...")
-        run_phase6_report()
+        run_phase6_report(base_dir=self.output_dir, logger=self.logger)
         self.logger.info("Module 3 Unified AI Pipeline Execution Completed Successfully!")
 
     def _sync_output_videos(self, primary_video_path: Path) -> None:
@@ -685,11 +725,20 @@ class UnifiedPipelineProcessor:
                 self.logger.warning(f"Could not link video to {target}: {exc}")
 
 
-def run_unified_pipeline(source: str) -> None:
+def run_unified_pipeline(
+    source: str,
+    zones: Optional[str] = None,
+    attention_regions: Optional[str] = None,
+) -> None:
     """Entry point to run the unified single-pass AI pipeline."""
     print_banner("INDRANI CONSUMER ATTENTION MAPPING SYSTEM\nModule 3 — Unified Single-Pass AI Pipeline")
     config = load_attention_analysis_config()
-    processor = UnifiedPipelineProcessor(config=config, source=source)
+    processor = UnifiedPipelineProcessor(
+        config=config,
+        source=source,
+        zones_path=zones,
+        attention_regions_path=attention_regions,
+    )
     processor.process()
 
 
@@ -697,5 +746,11 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Unified Single-Pass AI Pipeline")
     parser.add_argument("--source", type=str, default="ai/video.mp4", help="Video source file or camera index")
+    parser.add_argument("--zones", type=str, default=None, help="Path to custom zones.json")
+    parser.add_argument("--attention-regions", type=str, default=None, help="Path to custom attention_regions.json")
     args = parser.parse_args()
-    run_unified_pipeline(args.source)
+    run_unified_pipeline(
+        source=args.source,
+        zones=args.zones,
+        attention_regions=args.attention_regions,
+    )

@@ -83,6 +83,28 @@ def _update_job_status(
         job.updated_at = datetime.now(timezone.utc)
         db.commit()
         _logger.info(f"Job {job_id} status updated to {status}")
+
+        try:
+            from app.services.dashboard_service import invalidate_dashboard_cache
+            invalidate_dashboard_cache()
+        except Exception:
+            pass
+
+        try:
+            from app.core.job_stream import job_stream_manager
+            job_stream_manager.broadcast_sync(
+                str(job_id),
+                {
+                    "type": "status",
+                    "status": status,
+                    "error": error_message,
+                    "summary": summary,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        except Exception:
+            pass
+
     except Exception as exc:
         _logger.error(f"Failed to update job {job_id}: {exc}")
         db.rollback()
@@ -167,6 +189,7 @@ def run_pipeline(
     source: str,
     output_base_path: str,
     pipeline_timeout: int = 3600,
+    zone_config: Optional[dict] = None,
 ) -> None:
     """
     Execute the AI pipeline in a background thread.
@@ -174,9 +197,10 @@ def run_pipeline(
     This function:
     1. Updates job status to RUNNING
     2. Sets environment variables to redirect pipeline outputs
-    3. Calls ai/run_pipeline.py via subprocess
-    4. On completion, reads results and updates job with summary
-    5. On failure, captures error and updates job status
+    3. Serializes custom zone_config if provided
+    4. Calls ai/run_pipeline.py via subprocess
+    5. On completion, reads results and updates job with summary
+    6. On failure, captures error and updates job status
 
     Parameters
     ----------
@@ -188,6 +212,8 @@ def run_pipeline(
         Base path for this job's output files.
     pipeline_timeout : int
         Maximum seconds to allow the pipeline to run.
+    zone_config : dict, optional
+        Custom calibrated zone and shelf configurations.
     """
     project_root = _get_project_root()
     job_output_dir = Path(output_base_path)
@@ -197,6 +223,8 @@ def run_pipeline(
     _logger.info(f"  Output: {job_output_dir}")
     _logger.info(f"  Project root: {project_root}")
     _logger.info(f"  Timeout: {pipeline_timeout}s")
+    if zone_config:
+        _logger.info(f"  Custom zone config provided with {len(zone_config.get('zones', []))} zones")
 
     # Update status to RUNNING
     _update_job_status(job_id, "RUNNING", started=True)
@@ -221,11 +249,34 @@ def run_pipeline(
     env["DWELL_OUTPUT_PATH"] = str(job_output_dir / "phase4")
     env["ATTENTION_OUTPUT_PATH"] = str(job_output_dir / "phase5")
 
-    # Build the pipeline command
-    python_exe = sys.executable
+    # Resolve Python executable (prefer workspace venv if present)
+    venv_python = project_root / "venv" / "Scripts" / "python.exe"
+    python_exe = str(venv_python) if venv_python.exists() else sys.executable
     pipeline_script = str(project_root / "ai" / "run_pipeline.py")
 
     cmd = [python_exe, pipeline_script, "--source", source]
+
+    # Handle custom zone configurations
+    if zone_config:
+        # Write zones.json for Movement and Dwell analysis
+        custom_zones_path = job_output_dir / "custom_zones.json"
+        zones_payload = {
+            "zones": zone_config.get("zones", []),
+            "entry_regions": zone_config.get("entry_regions", []),
+            "exit_regions": zone_config.get("exit_regions", []),
+        }
+        with open(custom_zones_path, "w", encoding="utf-8") as f:
+            json.dump(zones_payload, f, indent=2)
+        cmd.extend(["--zones", str(custom_zones_path)])
+
+        # Write attention_regions.json for Gaze & Attention analysis
+        shelves_list = zone_config.get("shelves") or zone_config.get("regions") or []
+        if shelves_list:
+            custom_attn_path = job_output_dir / "custom_attention_regions.json"
+            attn_payload = {"regions": shelves_list}
+            with open(custom_attn_path, "w", encoding="utf-8") as f:
+                json.dump(attn_payload, f, indent=2)
+            cmd.extend(["--attention-regions", str(custom_attn_path)])
 
     _logger.info(f"  Command: {' '.join(cmd)}")
 
@@ -274,6 +325,18 @@ def run_pipeline(
                     line = line.rstrip()
                     output_lines.append(line)
                     _logger.info(f"  [AI] {line}")
+                    try:
+                        from app.core.job_stream import job_stream_manager
+                        job_stream_manager.broadcast_sync(
+                            job_id_str,
+                            {
+                                "type": "log",
+                                "message": line,
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            },
+                        )
+                    except Exception:
+                        pass
 
         except Exception as read_exc:
             _logger.error(f"Error reading pipeline output: {read_exc}")
@@ -311,6 +374,65 @@ def run_pipeline(
             except ValueError:
                 rel_output = str(job_output_dir)
 
+            # 1. Ingest Module 3 AI outputs and trajectories into MongoDB
+            try:
+                from app.repositories.ai_document_repository import AIDocumentRepository
+                db_lookup: Session = SessionLocal()
+                s_id, c_id = None, None
+                try:
+                    j_obj = db_lookup.query(AIJob).filter(AIJob.id == job_id).first()
+                    if j_obj:
+                        s_id, c_id = j_obj.store_id, j_obj.camera_id
+                finally:
+                    db_lookup.close()
+
+                AIDocumentRepository.ingest_job_artifacts_sync(
+                    job_id=job_id,
+                    output_dir=job_output_dir,
+                    store_id=s_id,
+                    camera_id=c_id,
+                )
+                _logger.info(f"AI artifacts for job {job_id} successfully ingested into MongoDB")
+            except Exception as mongo_exc:
+                _logger.warning(f"MongoDB post-processing ingestion skipped: {mongo_exc}")
+
+            # 2. Pre-warm & persist Module 4 Attention Analysis & 2D Heatmap
+            try:
+                from app.services.attention_service import get_or_run_module4_analysis
+                m4_db: Session = SessionLocal()
+                try:
+                    get_or_run_module4_analysis(m4_db, job_id, force_rerun=True)
+                    _logger.info(f"Module 4 Attention Analysis pre-warmed and persisted for job {job_id}")
+                finally:
+                    m4_db.close()
+            except Exception as m4_exc:
+                _logger.warning(f"Could not auto-generate Module 4 analysis for job {job_id}: {m4_exc}")
+
+            # 3. Pre-warm & persist Module 5 Product Interaction Analysis
+            try:
+                from app.services.interaction_service import get_or_run_module5_analysis
+                m5_db: Session = SessionLocal()
+                try:
+                    get_or_run_module5_analysis(m5_db, job_id, force_rerun=True)
+                    _logger.info(f"Module 5 Product Interaction Analysis pre-warmed and persisted for job {job_id}")
+                finally:
+                    m5_db.close()
+            except Exception as m5_exc:
+                _logger.warning(f"Could not auto-generate Module 5 analysis for job {job_id}: {m5_exc}")
+
+            # 4. Pre-warm & persist Module 6 Consumer Behavior Analysis
+            try:
+                from app.services.behavior_service import run_module6_analysis
+                m6_db: Session = SessionLocal()
+                try:
+                    run_module6_analysis(job_id=job_id, db=m6_db, force_recompute=True)
+                    _logger.info(f"Module 6 Consumer Behavior Analysis pre-warmed and persisted for job {job_id}")
+                finally:
+                    m6_db.close()
+            except Exception as m6_exc:
+                _logger.warning(f"Could not auto-generate Module 6 analysis for job {job_id}: {m6_exc}")
+
+            # 5. Mark job COMPLETED and broadcast state to UI
             _update_job_status(
                 job_id,
                 "COMPLETED",
@@ -318,30 +440,6 @@ def run_pipeline(
                 output_path=rel_output,
                 completed=True,
             )
-
-            # Automatically run Module 4 Attention Engine to persist aggregate analysis & reports
-            try:
-                from app.services.module4_service import get_or_run_module4_analysis
-                m4_db: Session = SessionLocal()
-                try:
-                    get_or_run_module4_analysis(m4_db, job_id)
-                    _logger.info(f"Module 4 Attention Analysis completed and persisted for job {job_id}")
-                finally:
-                    m4_db.close()
-            except Exception as m4_exc:
-                _logger.warning(f"Could not auto-generate Module 4 analysis for job {job_id}: {m4_exc}")
-
-            # Automatically run Module 5 Product Interaction Analysis to persist aggregate analysis & reports
-            try:
-                from app.services.module5_service import get_or_run_module5_analysis
-                m5_db: Session = SessionLocal()
-                try:
-                    get_or_run_module5_analysis(m5_db, job_id)
-                    _logger.info(f"Module 5 Product Interaction Analysis completed and persisted for job {job_id}")
-                finally:
-                    m5_db.close()
-            except Exception as m5_exc:
-                _logger.warning(f"Could not auto-generate Module 5 analysis for job {job_id}: {m5_exc}")
 
         elif was_stopped or signal_stopped:
             _logger.info(f"Job {job_id} was stopped by user")

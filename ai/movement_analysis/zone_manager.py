@@ -26,16 +26,33 @@ class ZoneDefinition:
     id: str
     name: str
     polygon: List[Tuple[int, int]]
+    raw_polygon: List[Tuple[float, float]] = field(default_factory=list)
+    is_normalized: bool = False
     _contour: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Pre-compute the OpenCV contour array for point-in-polygon tests."""
+        if not self.raw_polygon:
+            self.raw_polygon = [(float(p[0]), float(p[1])) for p in self.polygon]
+        self._recompute_contour()
+
+    def _recompute_contour(self) -> None:
+        """Recompute the OpenCV contour from the current polygon vertices."""
         self._contour = np.array(self.polygon, dtype=np.int32).reshape((-1, 1, 2))
 
     @property
     def contour(self) -> np.ndarray:
         """Return the pre-computed OpenCV contour for this zone polygon."""
         return self._contour
+
+    def scale_to_frame(self, width: int, height: int) -> None:
+        """Scale polygon coordinates from normalized (0-1) to pixel space."""
+        if self.is_normalized and width > 0 and height > 0:
+            self.polygon = [
+                (int(round(p[0] * width)), int(round(p[1] * height)))
+                for p in self.raw_polygon
+            ]
+            self._recompute_contour()
 
 
 class ZoneManager:
@@ -44,11 +61,13 @@ class ZoneManager:
 
     Loads polygon configurations from a JSON file and provides efficient
     point-in-polygon queries using cv2.pointPolygonTest.
+    Supports both absolute pixel coordinates and normalized (0.0 - 1.0) coordinates.
     """
 
     def __init__(
         self,
         config_path: Path,
+        frame_size: Optional[Tuple[int, int]] = None,
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -58,6 +77,8 @@ class ZoneManager:
         ----------
         config_path : Path
             Path to the zones.json configuration file.
+        frame_size : Tuple[int, int], optional
+            (width, height) to scale normalized coordinates immediately.
         logger : logging.Logger, optional
             Logger instance.
 
@@ -69,6 +90,7 @@ class ZoneManager:
             If the configuration is invalid or contains invalid polygons.
         """
         self.config_path = config_path
+        self.frame_size = frame_size
         self.logger = logger or setup_logger("zone_manager")
 
         self.zones: Dict[str, ZoneDefinition] = {}
@@ -76,6 +98,26 @@ class ZoneManager:
         self.exit_regions: Dict[str, ZoneDefinition] = {}
 
         self._load_config()
+        if self.frame_size:
+            self.scale_to_frame_size(self.frame_size[0], self.frame_size[1])
+
+    @property
+    def is_normalized(self) -> bool:
+        """Return whether loaded zones use normalized (0.0 - 1.0) coordinates."""
+        return any(z.is_normalized for z in self.zones.values())
+
+    def scale_to_frame_size(self, width: int, height: int) -> None:
+        """
+        Scale all normalized zone, entry, and exit polygons to the specified video frame dimensions.
+        """
+        self.frame_size = (width, height)
+        for zone in self.zones.values():
+            zone.scale_to_frame(width, height)
+        for entry in self.entry_regions.values():
+            entry.scale_to_frame(width, height)
+        for exit_r in self.exit_regions.values():
+            exit_r.scale_to_frame(width, height)
+        self.logger.info(f"Scaled zones to frame resolution: {width}x{height}")
 
     def _load_config(self) -> None:
         """Load and validate zone configuration from JSON file."""
@@ -164,9 +206,25 @@ class ZoneManager:
         # Validate polygon geometry
         self._validate_polygon(raw_polygon, region_id, region_type)
 
-        polygon = [(int(p[0]), int(p[1])) for p in raw_polygon]
+        raw_points = [(float(p[0]), float(p[1])) for p in raw_polygon]
+        # Check if coordinates are normalized (all coordinates <= 1.0 and any float < 1.0)
+        is_normalized = all(0.0 <= p[0] <= 1.0 and 0.0 <= p[1] <= 1.0 for p in raw_points) and any(
+            isinstance(p[0], float) or isinstance(p[1], float) for p in raw_points
+        )
 
-        return ZoneDefinition(id=region_id, name=region_name, polygon=polygon)
+        if is_normalized and self.frame_size:
+            w, h = self.frame_size
+            polygon = [(int(round(p[0] * w)), int(round(p[1] * h))) for p in raw_points]
+        else:
+            polygon = [(int(round(p[0])), int(round(p[1]))) for p in raw_points]
+
+        return ZoneDefinition(
+            id=region_id,
+            name=region_name,
+            polygon=polygon,
+            raw_polygon=raw_points,
+            is_normalized=is_normalized,
+        )
 
     def _validate_polygon(
         self, polygon: list, region_id: str, region_type: str
@@ -201,8 +259,8 @@ class ZoneManager:
                     f"expected [x, y], got {point}"
                 )
             try:
-                int(point[0])
-                int(point[1])
+                float(point[0])
+                float(point[1])
             except (TypeError, ValueError) as exc:
                 raise ValueError(
                     f"Non-numeric coordinate at vertex {i} in {region_type} "

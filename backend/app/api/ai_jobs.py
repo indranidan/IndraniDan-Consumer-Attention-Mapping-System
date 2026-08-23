@@ -13,10 +13,23 @@ Endpoints:
     GET    /api/ai/results/{job_id}/files/{path} Serve output file
 """
 
+import json
 import uuid
 
 # pyrefly: ignore [missing-import]
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    WebSocket,
+    status,
+)
 # pyrefly: ignore [missing-import]
 from fastapi.responses import FileResponse
 # pyrefly: ignore [missing-import]
@@ -55,21 +68,30 @@ def create_ai_job(
     camera_id: uuid.UUID = Form(...),
     input_type: str = Form("VIDEO_FILE"),
     source_override: str | None = Form(None),
+    zone_config: str | None = Form(None),
     file: UploadFile | None = File(None),
     current_user: User = Depends(admin_or_store_manager),
     db: Session = Depends(get_db),
 ):
     """
     Create a new AI analysis job for a store & camera.
-    Supports VIDEO_FILE uploads and WEBCAM recordings.
+    Supports VIDEO_FILE uploads and WEBCAM recordings with optional custom calibrated video zones.
     The analysis runs in the background — this endpoint returns immediately.
     Requires Administrator or Store Manager role.
     """
+    parsed_zone_config = None
+    if zone_config:
+        try:
+            parsed_zone_config = json.loads(zone_config) if isinstance(zone_config, str) else zone_config
+        except Exception:
+            pass
+
     payload = AIJobCreate(
         store_id=store_id,
         camera_id=camera_id,
         input_type=input_type,
         source_override=source_override,
+        zone_config=parsed_zone_config,
     )
     return ai_job_service.create_job(db, payload, current_user, upload_file=file)
 
@@ -240,3 +262,65 @@ def serve_ai_output_file(
         media_type=media_type,
         filename=resolved_path.name,
     )
+
+
+# ── Real-Time Streaming & Trajectory Endpoints ────────────────
+
+@router.websocket("/jobs/{job_id}/ws")
+async def ai_job_websocket_stream(websocket: WebSocket, job_id: uuid.UUID):
+    """
+    WebSocket endpoint streaming live AI pipeline progress, frame metrics, and logs.
+    """
+    from app.core.job_stream import job_stream_manager
+    # pyrefly: ignore [missing-import]
+    from fastapi import WebSocketDisconnect
+
+    job_key = str(job_id)
+    await job_stream_manager.connect(job_key, websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        job_stream_manager.disconnect(job_key, websocket)
+    except Exception:
+        job_stream_manager.disconnect(job_key, websocket)
+
+
+@router.get(
+    "/jobs/{job_id}/trajectories",
+    summary="Get shopper trajectory paths from MongoDB",
+    dependencies=[Depends(any_role)],
+)
+async def get_shopper_trajectories(
+    job_id: uuid.UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Retrieve shopper journeys and timestamped trajectories from MongoDB."""
+    from app.repositories.ai_document_repository import AIDocumentRepository
+    journeys = await AIDocumentRepository.list_shopper_journeys_async(
+        job_id=str(job_id), skip=skip, limit=limit
+    )
+    return {"job_id": str(job_id), "count": len(journeys), "journeys": journeys}
+
+
+@router.get(
+    "/jobs/{job_id}/trajectories/{tracking_id}",
+    summary="Get specific shopper trajectory path from MongoDB",
+    dependencies=[Depends(any_role)],
+)
+async def get_shopper_trajectory(
+    job_id: uuid.UUID,
+    tracking_id: int,
+):
+    """Retrieve a single shopper's trajectory path and session from MongoDB."""
+    from app.repositories.ai_document_repository import AIDocumentRepository
+    journey = await AIDocumentRepository.get_shopper_journey_async(
+        job_id=str(job_id), tracking_id=tracking_id
+    )
+    if not journey:
+        raise HTTPException(status_code=404, detail="Shopper trajectory not found")
+    return journey
+

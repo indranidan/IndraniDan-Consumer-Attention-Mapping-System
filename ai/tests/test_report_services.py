@@ -13,8 +13,11 @@ from pathlib import Path
 import sys
 import tempfile
 import uuid
+# pyrefly: ignore [missing-import]
 import pytest
+# pyrefly: ignore [missing-import]
 from sqlalchemy import create_engine
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import sessionmaker
 
 # Ensure paths
@@ -25,11 +28,16 @@ if str(_BACKEND_DIR) not in sys.path:
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+# pyrefly: ignore [missing-import]
 from app.database.database import Base
+# pyrefly: ignore [missing-import]
 from app.models.ai_job import AIJob
-from app.models.attention import AttentionAnalysis
+# pyrefly: ignore [missing-import]
+from app.repositories.ai_document_repository import AIDocumentRepository
+# pyrefly: ignore [missing-import]
 from app.services.ai_job_service import get_job_results, get_job_report
-from app.services.module4_service import get_module4_report
+# pyrefly: ignore [missing-import]
+from app.services.attention_service import get_module4_report
 
 
 @pytest.fixture
@@ -146,18 +154,16 @@ def test_module4_on_the_fly_report_synthesis(in_memory_db, tmp_path):
         created_by=uuid.uuid4(),
     )
     in_memory_db.add(job)
+    in_memory_db.commit()
 
-    # Add existing analysis record in DB
-    analysis = AttentionAnalysis(
-        id=uuid.uuid4(),
-        job_id=job_id,
-        camera_id=job.camera_id,
-        store_id=job.store_id,
-        total_events=3,
-        total_attention_duration_sec=9.5,
-        average_attention_duration_sec=3.17,
-        shelf_engagement_score_avg=78.5,
-        shelf_metrics=[
+    # Save analysis in AIDocumentRepository
+    analysis_dict = {
+        "job_id": str(job_id),
+        "total_events": 3,
+        "total_attention_duration_sec": 9.5,
+        "average_attention_duration_sec": 3.17,
+        "shelf_engagement_score_avg": 78.5,
+        "shelves": [
             {
                 "shelf_id": "shelf_1",
                 "shelf_name": "Bakery",
@@ -170,15 +176,15 @@ def test_module4_on_the_fly_report_synthesis(in_memory_db, tmp_path):
                 "repeated_attention_events": 1,
             }
         ],
-        product_metrics=[],
-        quality_metrics={
+        "products": [],
+        "quality_metrics": {
             "total_frames_analyzed": 100,
             "valid_face_detections": 80,
             "low_confidence_faces": 20,
             "face_detection_rate": 0.8,
             "average_pose_confidence": 0.85,
         },
-        summary_data={
+        "summary": {
             "total_attention_events": 3,
             "total_attention_duration_sec": 9.5,
             "average_attention_duration_sec": 3.17,
@@ -188,9 +194,8 @@ def test_module4_on_the_fly_report_synthesis(in_memory_db, tmp_path):
             "total_unique_viewers": 4,
             "shelf_engagement_score_avg": 78.5,
         },
-    )
-    in_memory_db.add(analysis)
-    in_memory_db.commit()
+    }
+    AIDocumentRepository.save_module4_analysis_sync(job_id, analysis_dict)
 
     # Note: module4_attention_report.md is deliberately NOT on disk
     # get_module4_report should synthesize it dynamically

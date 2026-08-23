@@ -140,6 +140,9 @@ class AttentionVideoProcessor:
                 f"Video opened: {self.width}x{self.height} @ {self.fps:.1f} FPS | "
                 f"Frames: {self.total_frames:,} | Duration: {self.duration_sec:.1f}s"
             )
+        if self.width > 0 and self.height > 0:
+            self.zone_manager.scale_to_frame_size(self.width, self.height)
+            self.region_manager.scale_to_frame_size(self.width, self.height)
 
     def close(self) -> None:
         """Release video capture resources."""
@@ -238,13 +241,15 @@ class AttentionVideoProcessor:
                         self.path_tracker.update(tid, frame_number, timestamp, cx, cy)
 
                     current_zone_ids = []
+                    foot_x = cx
+                    foot_y = int(track.bbox[3])
                     if mvmt_cfg.zone_tracking_enabled:
                         current_zone_ids = self.zone_tracker.update(
-                            tid, frame_number, timestamp, cx, cy
+                            tid, frame_number, timestamp, foot_x, foot_y
                         )
 
                     if mvmt_cfg.entry_exit_enabled:
-                        self.entry_exit_monitor.update(tid, frame_number, timestamp, cx, cy)
+                        self.entry_exit_monitor.update(tid, frame_number, timestamp, foot_x, foot_y)
 
                     # Phase 4: Dwell-time
                     if dwell_cfg.dwell_time_enabled and mvmt_cfg.zone_tracking_enabled:

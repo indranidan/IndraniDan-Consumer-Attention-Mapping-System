@@ -196,7 +196,7 @@ def main() -> None:
     phases.append((5, "Attention & Gaze Analysis", p5_cmd))
 
     # Phase 6: Attention Reports
-    p6_cmd = [python_exe, "ai/generate_attention_report.py"]
+    p6_cmd = [python_exe, "-m", "ai.attention_report.runner"]
     phases.append((6, "Attention Reports & Analytics", p6_cmd))
 
     # Execute selected phases
@@ -208,7 +208,11 @@ def main() -> None:
         print_header("OPTIMIZED EXECUTION: RUNNING UNIFIED SINGLE-PASS PIPELINE (PHASES 1-6)")
         try:
             from ai.unified_pipeline import run_unified_pipeline
-            run_unified_pipeline(source=args.source)
+            run_unified_pipeline(
+                source=args.source,
+                zones=args.zones,
+                attention_regions=args.attention_regions,
+            )
             for num, name, _ in phases:
                 completed_phases.append((num, name))
         except Exception as exc:

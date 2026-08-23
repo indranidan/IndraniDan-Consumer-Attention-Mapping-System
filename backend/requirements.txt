@@ -9,8 +9,13 @@ python-multipart==0.0.20
 # Database
 # ========================
 sqlalchemy==2.0.41
-psycopg2-binary==2.9.10
+psycopg[binary]>=3.2.0
 alembic==1.16.2
+pymongo>=4.6.0,<5.0.0
+motor>=3.3.0
+dnspython>=2.6.1
+certifi>=2024.0.0
+websockets>=12.0
 
 # ========================
 # Authentication & Security
@@ -22,8 +27,8 @@ bcrypt==4.3.0
 # ========================
 # Validation & Settings
 # ========================
-pydantic==2.11.4
-pydantic-settings==2.9.1
+pydantic>=2.11.4
+pydantic-settings>=2.9.1
 email-validator==2.2.0
 
 # ========================
@@ -32,3 +37,8 @@ email-validator==2.2.0
 authlib==1.6.0
 httpx==0.28.1
 itsdangerous==2.2.0
+
+# ========================
+# Real-Time Event Bus
+# ========================
+redis>=5.0.0

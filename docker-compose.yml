@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # ── PostgreSQL: Relational Data (Users, Stores, Zones, Products) ──
+  postgres:
+    image: postgres:15-alpine
+    container_name: cams_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: consumer_attention_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d consumer_attention_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── MongoDB: AI Outputs, Trajectories, Events, and Reports ─────────
+  mongodb:
+    image: mongo:7.0
+    container_name: cams_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: consumer_attention_ai_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend: FastAPI & AI Worker Services ──────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: cams_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/consumer_attention_db
+      MONGODB_URL: mongodb://mongodb:27017
+      MONGODB_DB_NAME: consumer_attention_ai_db
+      SECRET_KEY: change-this-in-production
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      FRONTEND_URL: http://localhost:3000
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      AI_OUTPUT_PATH: storage/outputs/ai_jobs
+      AI_INPUT_PATH: storage/uploads
+    volumes:
+      - ./storage:/app/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  # ── Frontend: React 18 + Vite Web Application ──────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cams_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+    driver: local
+  mongo_data:
+    driver: local

@@ -7,7 +7,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getProducts, createProduct, updateProduct, deleteProduct, getStores, getZones, getShelves } from "../services/storeService";
+import {
+  getProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  getStores,
+  getZones,
+  getShelves,
+  getSyncCachedData,
+} from "../services/storeService";
 import PageHeader from "../components/ui/PageHeader";
 import DataTable from "../components/ui/DataTable";
 import Modal from "../components/ui/Modal";
@@ -21,18 +30,28 @@ export default function Products() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const storeIdFilter = searchParams.get("store_id") || "";
-  const [products, setProducts] = useState([]);
-  const [stores, setStores] = useState([]);
+
+  const initialParams = { page: 1, page_size: 10 };
+  if (storeIdFilter) initialParams.store_id = storeIdFilter;
+  const cachedProductsRes = getSyncCachedData("products", JSON.stringify(initialParams));
+  const cachedStoresRes = getSyncCachedData("stores", JSON.stringify({}));
+
+  const [products, setProducts] = useState(cachedProductsRes?.data || []);
+  const [stores, setStores] = useState(cachedStoresRes?.data || []);
   const [zones, setZones] = useState([]);
   const [shelves, setShelves] = useState([]);
   const [filterZones, setFilterZones] = useState([]);
   const [filterShelves, setFilterShelves] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedProductsRes);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [totalCount, setTotalCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(
+    cachedProductsRes
+      ? parseInt(cachedProductsRes?.headers?.["x-total-count"] || cachedProductsRes?.data?.length || 0, 10)
+      : 0
+  );
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
@@ -46,7 +65,7 @@ export default function Products() {
   const canWrite = ["Administrator", "Store Manager"].includes(userRole);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    if (!products.length) setLoading(true);
     try {
       const params = { page, page_size: pageSize };
       if (storeIdFilter) params.store_id = storeIdFilter;
@@ -57,9 +76,16 @@ export default function Products() {
       setStores(storesRes.data);
       const total = parseInt(productsRes.headers["x-total-count"] || productsRes.data.length, 10);
       setTotalCount(total);
-    } catch { setProducts([]); setTotalCount(0); }
-    finally { setLoading(false); }
+    } catch {
+      if (!products.length) {
+        setProducts([]);
+        setTotalCount(0);
+      }
+    } finally {
+      setLoading(false);
+    }
   }, [search, storeIdFilter, filters, page, pageSize]);
+
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

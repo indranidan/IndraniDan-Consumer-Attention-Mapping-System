@@ -8,10 +8,20 @@ Run with:
     uvicorn app.main:app --reload --port 8000
 """
 
+import sys
+from pathlib import Path
 from contextlib import asynccontextmanager
 
+# Ensure project root is in sys.path
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import get_settings
@@ -24,8 +34,14 @@ from app.api.products import router as products_router
 from app.api.cameras import router as cameras_router
 from app.api.dashboard import router as dashboard_router
 from app.api.ai_jobs import router as ai_jobs_router
-from app.api.module4 import router as module4_router
-from app.api.module5 import router as module5_router
+from app.api.attention import router as attention_router
+from app.api.interactions import router as interactions_router
+from app.api.behavior import router as behavior_router
+
+from app.database.database import SessionLocal
+from app.database.mongodb import connect_mongo, close_mongo, get_mongo_client
+# pyrefly: ignore [missing-import]
+from sqlalchemy import text
 
 settings = get_settings()
 
@@ -38,11 +54,42 @@ async def lifespan(app: FastAPI):
     print("[INFO] Consumer Attention Mapping System -- Backend Starting...")
     print(f"[INFO] CORS Origins: {settings.cors_origins_list}")
     print(f"[INFO] JWT Expiry: {settings.ACCESS_TOKEN_EXPIRE_MINUTES} minutes")
-    google_status = "Configured" if settings.GOOGLE_CLIENT_ID else "Not configured"
-    print(f"[INFO] Google OAuth: {google_status}")
+
+    # PostgreSQL status check
+    try:
+        with SessionLocal() as db_session:
+            db_session.execute(text("SELECT 1"))
+            # Safety schema check for zone_config column
+            db_session.execute(text("ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS zone_config JSON;"))
+            db_session.commit()
+        db_target = settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else "Active"
+        print(f"[INFO] PostgreSQL: Connected ✅ ({db_target})")
+    except Exception as exc:
+        print(f"[WARNING] PostgreSQL: Connection check failed ❌ ({exc})")
+
+    # MongoDB status check & connection
+    mongo_client = await connect_mongo()
+    if mongo_client:
+        print(f"[INFO] MongoDB: Connected ✅ (Database: {settings.MONGODB_DB_NAME})")
+    else:
+        print(f"[INFO] MongoDB: Fallback Mode ❌ (Local storage active)")
+
+    # Google OAuth status check
+    if settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET:
+        cid_preview = settings.GOOGLE_CLIENT_ID[:12] + "..." if len(settings.GOOGLE_CLIENT_ID) > 15 else settings.GOOGLE_CLIENT_ID
+        print(f"[INFO] Google OAuth: Configured ✅ (Client ID: {cid_preview})")
+    else:
+        print("[INFO] Google OAuth: Not configured ❌")
+
+    import asyncio
+    from app.core.job_stream import job_stream_manager
+    job_stream_manager.set_event_loop(asyncio.get_running_loop())
+
     yield
+
     # Shutdown
     print("[INFO] Backend shutting down...")
+    await close_mongo()
 
 
 # ── Application Instance ─────────────────────────────────────
@@ -54,14 +101,13 @@ app = FastAPI(
         "Module 3: AI-Powered Consumer Tracking & Dwell Analysis. "
         "Module 4: Attention Analysis Engine (Gaze, Head Pose, Shelf & Product Engagement). "
         "Module 5: Product Interaction Analysis Module (Viewed, Pickup, Return, Comparison, Shelf Interaction). "
+        "Module 6: Consumer Behavior Intelligence Engine (Shopper Segmentation, Journeys, Transitions). "
         "Provides user registration, login, JWT auth, Google OAuth, "
         "role-based permissions, full retail store management, "
         "and advanced shopper behavior & product interaction analytics."
     ),
-    version="5.0.0",
+    version="6.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
 )
 
 
@@ -99,11 +145,14 @@ app.include_router(dashboard_router)
 # Module 3: AI Analytics
 app.include_router(ai_jobs_router)
 
-# Module 4: Attention Analysis Engine
-app.include_router(module4_router)
+# Attention Analysis Engine
+app.include_router(attention_router)
 
-# Module 5: Product Interaction Analysis Module
-app.include_router(module5_router)
+# Product Interaction Analysis Module
+app.include_router(interactions_router)
+
+# Consumer Behavior Intelligence Engine
+app.include_router(behavior_router)
 
 
 # ── Health Check ──────────────────────────────────────────────
@@ -113,18 +162,42 @@ app.include_router(module5_router)
     summary="Health check",
 )
 def health_check():
-    """Returns a simple health status for monitoring."""
+    """Returns system and database health status for monitoring."""
+    # Check PostgreSQL
+    pg_status = "healthy"
+    try:
+        with SessionLocal() as db_session:
+            db_session.execute(text("SELECT 1"))
+    except Exception as exc:
+        pg_status = f"unhealthy: {str(exc)}"
+
+    # Check MongoDB
+    mongo_client = get_mongo_client()
+    mongo_status = "connected" if mongo_client is not None else "fallback_mode"
+
+    google_configured = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
+    overall_status = "healthy" if pg_status == "healthy" else "degraded"
+
     return {
-        "status": "healthy",
+        "status": overall_status,
         "service": "Consumer Attention Mapping System",
+        "databases": {
+            "postgresql": pg_status,
+            "mongodb": mongo_status,
+        },
+        "auth_providers": {
+            "password": True,
+            "google_oauth": google_configured,
+        },
         "modules": [
             "Authentication & RBAC",
             "Store & Shelf Management",
             "AI Consumer Tracking & Dwell Analysis",
             "Attention Analysis Engine",
             "Product Interaction Analysis Module",
+            "Consumer Behavior Intelligence Engine",
         ],
-        "version": "5.0.0",
+        "version": "6.0.0",
     }
 
 

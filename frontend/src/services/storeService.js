@@ -7,68 +7,245 @@
 
 import api from "./api";
 
+// ── Global Client-Side SWR Cache Manager (with sessionStorage) ──
+const _clientEntityCache = new Map();
+const ENTITY_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+const SESSION_STORAGE_KEY_PREFIX = "app_cache_v1:";
+
+// Populate initial in-memory cache from sessionStorage on startup
+try {
+  if (typeof window !== "undefined" && window.sessionStorage) {
+    for (let i = 0; i < window.sessionStorage.length; i++) {
+      const k = window.sessionStorage.key(i);
+      if (k && k.startsWith(SESSION_STORAGE_KEY_PREFIX)) {
+        const raw = window.sessionStorage.getItem(k);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const fullKey = k.slice(SESSION_STORAGE_KEY_PREFIX.length);
+          if (Date.now() - parsed.timestamp < (parsed.ttlMs || ENTITY_CACHE_TTL_MS)) {
+            _clientEntityCache.set(fullKey, parsed);
+          } else {
+            window.sessionStorage.removeItem(k);
+          }
+        }
+      }
+    }
+  }
+} catch (e) {
+  // Silent fallback if sessionStorage is disabled or restricted
+}
+
+export const invalidateClientCache = (...tags) => {
+  if (!tags || tags.length === 0) {
+    _clientEntityCache.clear();
+    try {
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        const keysToRemove = [];
+        for (let i = 0; i < window.sessionStorage.length; i++) {
+          const k = window.sessionStorage.key(i);
+          if (k && k.startsWith(SESSION_STORAGE_KEY_PREFIX)) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach((k) => window.sessionStorage.removeItem(k));
+      }
+    } catch (_) {}
+    return;
+  }
+
+  for (const tag of tags) {
+    for (const key of Array.from(_clientEntityCache.keys())) {
+      if (key.startsWith(`${tag}:`)) {
+        _clientEntityCache.delete(key);
+        try {
+          if (typeof window !== "undefined" && window.sessionStorage) {
+            window.sessionStorage.removeItem(`${SESSION_STORAGE_KEY_PREFIX}${key}`);
+          }
+        } catch (_) {}
+      }
+    }
+  }
+};
+
+export const getSyncCachedData = (tag, key = "default") => {
+  const fullKey = `${tag}:${key}`;
+  const now = Date.now();
+  if (_clientEntityCache.has(fullKey)) {
+    const cached = _clientEntityCache.get(fullKey);
+    if (now - cached.timestamp < (cached.ttlMs || ENTITY_CACHE_TTL_MS)) {
+      return cached.data;
+    }
+    _clientEntityCache.delete(fullKey);
+  }
+  return null;
+};
+
+export const hasSyncCachedData = (tag, key = "default") => {
+  return getSyncCachedData(tag, key) !== null;
+};
+
+const cachedGet = async (tag, key, fetcher, ttlMs = ENTITY_CACHE_TTL_MS, forceFresh = false) => {
+  const fullKey = `${tag}:${key}`;
+  const now = Date.now();
+  if (!forceFresh && _clientEntityCache.has(fullKey)) {
+    const cached = _clientEntityCache.get(fullKey);
+    if (now - cached.timestamp < ttlMs) {
+      return cached.data;
+    }
+    _clientEntityCache.delete(fullKey);
+  }
+
+  const res = await fetcher();
+  const entry = {
+    timestamp: now,
+    ttlMs,
+    data: {
+      data: res.data,
+      status: res.status,
+      headers: res.headers || {},
+    },
+  };
+
+  _clientEntityCache.set(fullKey, entry);
+  try {
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      window.sessionStorage.setItem(`${SESSION_STORAGE_KEY_PREFIX}${fullKey}`, JSON.stringify(entry));
+    }
+  } catch (_) {}
+
+  return res;
+};
+
+
 // ── Dashboard ────────────────────────────────────────────────
-export const getDashboardStats = () => api.get("/api/dashboard/stats");
+export const getDashboardStats = (forceFresh = false) =>
+  cachedGet("dashboard", "stats", () => api.get("/api/dashboard/stats"), 30000, forceFresh);
 
 // ── Stores ───────────────────────────────────────────────────
-export const getStores = (params = {}) =>
-  api.get("/api/stores", { params });
+export const getStores = (params = {}, forceFresh = false) =>
+  cachedGet("stores", JSON.stringify(params), () => api.get("/api/stores", { params }), ENTITY_CACHE_TTL_MS, forceFresh);
 
-export const getStoreById = (id) => api.get(`/api/stores/${id}`);
+export const getStoreById = (id, forceFresh = false) =>
+  cachedGet("stores", `id:${id}`, () => api.get(`/api/stores/${id}`), ENTITY_CACHE_TTL_MS, forceFresh);
 
-export const createStore = (data) => api.post("/api/stores", data);
+export const createStore = async (data) => {
+  const res = await api.post("/api/stores", data);
+  invalidateClientCache("stores", "dashboard");
+  return res;
+};
 
-export const updateStore = (id, data) => api.put(`/api/stores/${id}`, data);
+export const updateStore = async (id, data) => {
+  const res = await api.put(`/api/stores/${id}`, data);
+  invalidateClientCache("stores", "dashboard");
+  return res;
+};
 
-export const deleteStore = (id) => api.delete(`/api/stores/${id}`);
+export const deleteStore = async (id) => {
+  const res = await api.delete(`/api/stores/${id}`);
+  invalidateClientCache("stores", "zones", "shelves", "products", "cameras", "dashboard");
+  return res;
+};
 
 // ── Zones ────────────────────────────────────────────────────
-export const getZones = (params = {}) =>
-  api.get("/api/zones", { params });
+export const getZones = (params = {}, forceFresh = false) =>
+  cachedGet("zones", JSON.stringify(params), () => api.get("/api/zones", { params }), ENTITY_CACHE_TTL_MS, forceFresh);
 
-export const getZoneById = (id) => api.get(`/api/zones/${id}`);
+export const getZoneById = (id, forceFresh = false) =>
+  cachedGet("zones", `id:${id}`, () => api.get(`/api/zones/${id}`), ENTITY_CACHE_TTL_MS, forceFresh);
 
-export const createZone = (data) => api.post("/api/zones", data);
+export const createZone = async (data) => {
+  const res = await api.post("/api/zones", data);
+  invalidateClientCache("zones", "dashboard");
+  return res;
+};
 
-export const updateZone = (id, data) => api.put(`/api/zones/${id}`, data);
+export const updateZone = async (id, data) => {
+  const res = await api.put(`/api/zones/${id}`, data);
+  invalidateClientCache("zones", "dashboard");
+  return res;
+};
 
-export const deleteZone = (id) => api.delete(`/api/zones/${id}`);
+export const deleteZone = async (id) => {
+  const res = await api.delete(`/api/zones/${id}`);
+  invalidateClientCache("zones", "shelves", "products", "dashboard");
+  return res;
+};
 
 // ── Shelves ──────────────────────────────────────────────────
-export const getShelves = (params = {}) =>
-  api.get("/api/shelves", { params });
+export const getShelves = (params = {}, forceFresh = false) =>
+  cachedGet("shelves", JSON.stringify(params), () => api.get("/api/shelves", { params }), ENTITY_CACHE_TTL_MS, forceFresh);
 
-export const getShelfById = (id) => api.get(`/api/shelves/${id}`);
+export const getShelfById = (id, forceFresh = false) =>
+  cachedGet("shelves", `id:${id}`, () => api.get(`/api/shelves/${id}`), ENTITY_CACHE_TTL_MS, forceFresh);
 
-export const createShelf = (data) => api.post("/api/shelves", data);
+export const createShelf = async (data) => {
+  const res = await api.post("/api/shelves", data);
+  invalidateClientCache("shelves", "dashboard");
+  return res;
+};
 
-export const updateShelf = (id, data) => api.put(`/api/shelves/${id}`, data);
+export const updateShelf = async (id, data) => {
+  const res = await api.put(`/api/shelves/${id}`, data);
+  invalidateClientCache("shelves", "dashboard");
+  return res;
+};
 
-export const deleteShelf = (id) => api.delete(`/api/shelves/${id}`);
+export const deleteShelf = async (id) => {
+  const res = await api.delete(`/api/shelves/${id}`);
+  invalidateClientCache("shelves", "products", "dashboard");
+  return res;
+};
 
 // ── Products ─────────────────────────────────────────────────
-export const getProducts = (params = {}) =>
-  api.get("/api/products", { params });
+export const getProducts = (params = {}, forceFresh = false) =>
+  cachedGet("products", JSON.stringify(params), () => api.get("/api/products", { params }), ENTITY_CACHE_TTL_MS, forceFresh);
 
-export const getProductById = (id) => api.get(`/api/products/${id}`);
+export const getProductById = (id, forceFresh = false) =>
+  cachedGet("products", `id:${id}`, () => api.get(`/api/products/${id}`), ENTITY_CACHE_TTL_MS, forceFresh);
 
-export const createProduct = (data) => api.post("/api/products", data);
+export const createProduct = async (data) => {
+  const res = await api.post("/api/products", data);
+  invalidateClientCache("products", "dashboard");
+  return res;
+};
 
-export const updateProduct = (id, data) => api.put(`/api/products/${id}`, data);
+export const updateProduct = async (id, data) => {
+  const res = await api.put(`/api/products/${id}`, data);
+  invalidateClientCache("products", "dashboard");
+  return res;
+};
 
-export const deleteProduct = (id) => api.delete(`/api/products/${id}`);
+export const deleteProduct = async (id) => {
+  const res = await api.delete(`/api/products/${id}`);
+  invalidateClientCache("products", "dashboard");
+  return res;
+};
 
 // ── Cameras ──────────────────────────────────────────────────
-export const getCameras = (params = {}) =>
-  api.get("/api/cameras", { params });
+export const getCameras = (params = {}, forceFresh = false) =>
+  cachedGet("cameras", JSON.stringify(params), () => api.get("/api/cameras", { params }), ENTITY_CACHE_TTL_MS, forceFresh);
 
-export const getCameraById = (id) => api.get(`/api/cameras/${id}`);
+export const getCameraById = (id, forceFresh = false) =>
+  cachedGet("cameras", `id:${id}`, () => api.get(`/api/cameras/${id}`), ENTITY_CACHE_TTL_MS, forceFresh);
 
-export const createCamera = (data) => api.post("/api/cameras", data);
+export const createCamera = async (data) => {
+  const res = await api.post("/api/cameras", data);
+  invalidateClientCache("cameras", "dashboard");
+  return res;
+};
 
-export const updateCamera = (id, data) => api.put(`/api/cameras/${id}`, data);
+export const updateCamera = async (id, data) => {
+  const res = await api.put(`/api/cameras/${id}`, data);
+  invalidateClientCache("cameras", "dashboard");
+  return res;
+};
 
-export const deleteCamera = (id) => api.delete(`/api/cameras/${id}`);
+export const deleteCamera = async (id) => {
+  const res = await api.delete(`/api/cameras/${id}`);
+  invalidateClientCache("cameras", "dashboard");
+  return res;
+};
+
 
 // ── AI Analytics ─────────────────────────────────────────────
 export const createAIJob = (data) => {
@@ -80,7 +257,11 @@ export const createAIJob = (data) => {
   const formData = new FormData();
   Object.keys(data).forEach((key) => {
     if (data[key] !== undefined && data[key] !== null) {
-      formData.append(key, data[key]);
+      const val =
+        typeof data[key] === "object" && !(data[key] instanceof File)
+          ? JSON.stringify(data[key])
+          : data[key];
+      formData.append(key, val);
     }
   });
   return api.post("/api/ai/jobs", formData, {
@@ -108,50 +289,207 @@ export const getAIFileUrl = (jobId, filePath) => {
 };
 
 
-// ── Module 4: Attention Analysis Engine ───────────────────────
-export const getModule4Analysis = (jobId) =>
-  api.get(`/api/module4/jobs/${jobId}/attention-analysis`);
+// ── Attention Analysis Engine ───────────────────────────────────
+export const getAttentionAnalysis = (jobId) =>
+  api.get(`/api/v1/attention/jobs/${jobId}/attention-analysis`);
 
-export const getModule4ShelfMetrics = (jobId) =>
-  api.get(`/api/module4/jobs/${jobId}/shelf-metrics`);
+export const getAttentionShelfMetrics = (jobId) =>
+  api.get(`/api/v1/attention/jobs/${jobId}/shelf-metrics`);
 
-export const getModule4ProductMetrics = (jobId) =>
-  api.get(`/api/module4/jobs/${jobId}/product-metrics`);
+export const getAttentionProductMetrics = (jobId) =>
+  api.get(`/api/v1/attention/jobs/${jobId}/product-metrics`);
 
-export const getModule4Events = (jobId, params = {}) =>
-  api.get(`/api/module4/jobs/${jobId}/events`, { params });
+export const getAttentionEvents = (jobId, params = {}) =>
+  api.get(`/api/v1/attention/jobs/${jobId}/events`, { params });
 
-export const getModule4Report = (jobId) =>
-  api.get(`/api/module4/jobs/${jobId}/report`);
+export const getAttentionReport = (jobId) =>
+  api.get(`/api/v1/attention/jobs/${jobId}/report`);
 
-export const getModule4Heatmap = (jobId) =>
-  api.get(`/api/module4/jobs/${jobId}/heatmap`);
+export const getAttentionHeatmap = (jobId) =>
+  api.get(`/api/v1/attention/jobs/${jobId}/heatmap`);
 
-export const runModule4Job = (jobId) =>
-  api.post(`/api/module4/jobs/${jobId}/run`);
+export const runAttentionJob = (jobId) =>
+  api.post(`/api/v1/attention/jobs/${jobId}/run`);
+
+// Backward-compatible aliases
+export const getModule4Analysis = getAttentionAnalysis;
+export const getModule4ShelfMetrics = getAttentionShelfMetrics;
+export const getModule4ProductMetrics = getAttentionProductMetrics;
+export const getModule4Events = getAttentionEvents;
+export const getModule4Report = getAttentionReport;
+export const getModule4Heatmap = getAttentionHeatmap;
+export const runModule4Job = runAttentionJob;
 
 
-// ── Module 5: Product Interaction Analysis ────────────────────
-export const getModule5Analysis = (jobId) =>
-  api.get(`/api/module5/jobs/${jobId}/interaction-analysis`);
+// ── Product Interaction Analysis ───────────────────────────────
+export const getInteractionAnalysis = (jobId) =>
+  api.get(`/api/v1/interactions/jobs/${jobId}/interaction-analysis`);
 
-export const getModule5ProductEngagement = (jobId) =>
-  api.get(`/api/module5/jobs/${jobId}/product-engagement`);
+export const getProductEngagement = (jobId) =>
+  api.get(`/api/v1/interactions/jobs/${jobId}/product-engagement`);
 
-export const getModule5ShelfInteractions = (jobId) =>
-  api.get(`/api/module5/jobs/${jobId}/shelf-interactions`);
+export const getShelfInteractions = (jobId) =>
+  api.get(`/api/v1/interactions/jobs/${jobId}/shelf-interactions`);
 
-export const getModule5Events = (jobId, params = {}) =>
-  api.get(`/api/module5/jobs/${jobId}/events`, { params });
+export const getInteractionEvents = (jobId, params = {}) =>
+  api.get(`/api/v1/interactions/jobs/${jobId}/events`, { params });
 
-export const getModule5Comparisons = (jobId) =>
-  api.get(`/api/module5/jobs/${jobId}/comparisons`);
+export const getProductComparisons = (jobId) =>
+  api.get(`/api/v1/interactions/jobs/${jobId}/comparisons`);
 
-export const getModule5Report = (jobId) =>
-  api.get(`/api/module5/jobs/${jobId}/report`);
+export const getInteractionReport = (jobId) =>
+  api.get(`/api/v1/interactions/jobs/${jobId}/report`);
 
-export const runModule5Job = (jobId) =>
-  api.post(`/api/module5/jobs/${jobId}/run`);
+export const runInteractionJob = (jobId) =>
+  api.post(`/api/v1/interactions/jobs/${jobId}/run`);
+
+// Backward-compatible aliases
+export const getModule5Analysis = getInteractionAnalysis;
+export const getModule5ProductEngagement = getProductEngagement;
+export const getModule5ShelfInteractions = getShelfInteractions;
+export const getModule5Events = getInteractionEvents;
+export const getModule5Comparisons = getProductComparisons;
+export const getModule5Report = getInteractionReport;
+export const runModule5Job = runInteractionJob;
+
+
+// ── MongoDB Shopper Trajectories & WebSocket Stream ──────────
+export const getShopperTrajectories = (jobId, params = {}) =>
+  api.get(`/api/ai/jobs/${jobId}/trajectories`, { params });
+
+export const getShopperTrajectory = (jobId, trackingId) =>
+  api.get(`/api/ai/jobs/${jobId}/trajectories/${trackingId}`);
+
+export const createJobWebSocket = (jobId, onMessage, onError, onClose) => {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const host = window.location.hostname === "localhost" ? "localhost:8000" : window.location.host;
+  const wsUrl = `${protocol}//${host}/api/ai/jobs/${jobId}/ws`;
+  const ws = new WebSocket(wsUrl);
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (onMessage) onMessage(data);
+    } catch (err) {
+      console.warn("WebSocket parse error:", err);
+    }
+  };
+
+  if (onError) ws.onerror = onError;
+  if (onClose) ws.onclose = onClose;
+
+  return ws;
+};
+
+// ── Unified AI Job Orchestration ─────────────────────────────
+export const reEvaluateAIJob = async (jobId) => {
+  const [attentionRes, interactionRes, behaviorRes] = await Promise.all([
+    runAttentionJob(jobId),
+    runInteractionJob(jobId),
+    runBehaviorJob(jobId),
+  ]);
+  return {
+    attention: attentionRes.data,
+    interaction: interactionRes.data,
+    behavior: behaviorRes.data,
+  };
+};
+
+// ── In-Memory Session Cache for Unified AI Datasets & Behavior Intelligence ──
+const _unifiedDataCache = new Map();
+const _behaviorCache = new Map();
+const UNIFIED_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+export const invalidateUnifiedDataCache = (jobId = null) => {
+  if (jobId) {
+    _unifiedDataCache.delete(jobId);
+    _behaviorCache.delete(jobId);
+  } else {
+    _unifiedDataCache.clear();
+    _behaviorCache.clear();
+  }
+};
+
+export const getUnifiedAIJobData = async (jobId, forceFresh = false) => {
+  const now = Date.now();
+  if (!forceFresh && _unifiedDataCache.has(jobId)) {
+    const cached = _unifiedDataCache.get(jobId);
+    if (now - cached.timestamp < UNIFIED_CACHE_TTL_MS) {
+      return cached.data;
+    }
+    _unifiedDataCache.delete(jobId);
+  }
+
+  const [
+    resultsRes,
+    reportRes,
+    attentionRes,
+    interactionRes,
+    heatmapRes,
+    behaviorRes,
+  ] = await Promise.allSettled([
+    getAIJobResults(jobId),
+    getAIJobReport(jobId),
+    getAttentionAnalysis(jobId),
+    getInteractionAnalysis(jobId),
+    getAttentionHeatmap(jobId),
+    getBehaviorAnalysis(jobId, forceFresh),
+  ]);
+
+  const data = {
+    results: resultsRes.status === "fulfilled" ? resultsRes.value.data : null,
+    report: reportRes.status === "fulfilled" ? reportRes.value.data : null,
+    attention: attentionRes.status === "fulfilled" ? attentionRes.value.data : null,
+    interaction: interactionRes.status === "fulfilled" ? interactionRes.value.data : null,
+    heatmap: heatmapRes.status === "fulfilled" ? heatmapRes.value.data : null,
+    behavior: behaviorRes.status === "fulfilled" ? behaviorRes.value.data : null,
+  };
+
+  _unifiedDataCache.set(jobId, { timestamp: now, data });
+  return data;
+};
+
+// ── Dashboard Aggregations & Camera Health ──────────────────
+export const getDashboardAnalytics = (forceFresh = false) =>
+  cachedGet("dashboard", "analytics", () => api.get("/api/dashboard/analytics"), 20000, forceFresh);
+export const testCameraStream = (cameraId) => api.post(`/api/cameras/${cameraId}/test`);
+export const getCameraSnapshot = (cameraId) => api.get(`/api/cameras/${cameraId}/snapshot`);
+
+
+// ── Module 6: Consumer Behavior Intelligence ───────────────────
+export const runBehaviorJob = async (jobId) => {
+  invalidateUnifiedDataCache(jobId);
+  return api.post(`/api/behavior/${jobId}/analyze?force_recompute=true`);
+};
+
+export const getBehaviorAnalysis = async (jobId, forceFresh = false) => {
+  const now = Date.now();
+  if (!forceFresh && _behaviorCache.has(jobId)) {
+    const cached = _behaviorCache.get(jobId);
+    if (now - cached.timestamp < UNIFIED_CACHE_TTL_MS) {
+      return cached.data;
+    }
+    _behaviorCache.delete(jobId);
+  }
+  const res = await api.get(`/api/behavior/${jobId}/analysis`);
+  _behaviorCache.set(jobId, { timestamp: now, data: res });
+  return res;
+};
+
+export const getBehaviorJourneys = (jobId) =>
+  api.get(`/api/behavior/${jobId}/journeys`);
+
+export const getBehaviorTransitions = (jobId) =>
+  api.get(`/api/behavior/${jobId}/transitions`);
+
+export const getBehaviorFunnel = (jobId) =>
+  api.get(`/api/behavior/${jobId}/funnel`);
+
+export const runModule6Job = runBehaviorJob;
+export const getModule6Analysis = getBehaviorAnalysis;
+export const getModule6Journeys = getBehaviorJourneys;
+export const getModule6Transitions = getBehaviorTransitions;
+export const getModule6Funnel = getBehaviorFunnel;
 
 
 

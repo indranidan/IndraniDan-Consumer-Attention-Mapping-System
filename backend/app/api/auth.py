@@ -130,6 +130,22 @@ def list_roles(db: Session = Depends(get_db)):
     return get_all_roles(db)
 
 
+# ── Auth Providers Discovery ─────────────────────────────────
+@router.get(
+    "/providers",
+    summary="List available authentication providers",
+)
+def list_auth_providers():
+    """
+    Returns available authentication providers (password, google oauth)
+    so frontend can adapt dynamic login/registration buttons.
+    """
+    return {
+        "password": True,
+        "google": bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET),
+    }
+
+
 # ── Google OAuth: Initiate Login ──────────────────────────────
 @router.get(
     "/google/login",

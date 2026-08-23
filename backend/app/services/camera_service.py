@@ -169,3 +169,99 @@ def delete_camera(db: Session, camera_id: uuid.UUID) -> None:
 
     db.delete(camera)
     db.commit()
+
+
+def probe_camera_stream(db: Session, camera_id: uuid.UUID) -> dict:
+    """Test accessibility of camera stream URL or index with timeout."""
+    import base64
+    import time
+    import cv2
+
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera with id '{camera_id}' not found.",
+        )
+    source = camera.camera_source.strip()
+    cap_source = int(source) if source.isdigit() else source
+
+    start = time.time()
+    cap = cv2.VideoCapture(cap_source)
+    if not cap.isOpened():
+        latency_ms = int((time.time() - start) * 1000)
+        return {
+            "camera_id": str(camera.id),
+            "status": "OFFLINE",
+            "message": "Could not connect to camera stream source.",
+            "latency_ms": latency_ms,
+            "resolution": None,
+            "fps": None,
+        }
+
+    ret, frame = cap.read()
+    latency_ms = int((time.time() - start) * 1000)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    cap.release()
+
+    if not ret or frame is None:
+        return {
+            "camera_id": str(camera.id),
+            "status": "UNREACHABLE",
+            "message": "Connected but unable to decode stream frames.",
+            "latency_ms": latency_ms,
+            "resolution": None,
+            "fps": None,
+        }
+
+    return {
+        "camera_id": str(camera.id),
+        "status": "ONLINE",
+        "message": "Camera stream is online and active.",
+        "latency_ms": latency_ms,
+        "resolution": f"{width}x{height}",
+        "fps": round(fps, 1),
+    }
+
+
+def capture_camera_snapshot(db: Session, camera_id: uuid.UUID) -> dict:
+    """Capture a single JPEG snapshot from camera stream and return base64 data."""
+    import base64
+    import cv2
+
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera with id '{camera_id}' not found.",
+        )
+    source = camera.camera_source.strip()
+    cap_source = int(source) if source.isdigit() else source
+
+    cap = cv2.VideoCapture(cap_source)
+    if not cap.isOpened():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to open camera stream for snapshot.",
+        )
+    ret, frame = cap.read()
+    cap.release()
+
+    if not ret or frame is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to read frame from camera stream.",
+        )
+
+    _, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+    jpg_as_text = base64.b64encode(buffer).decode("utf-8")
+
+    return {
+        "camera_id": str(camera.id),
+        "camera_name": camera.name,
+        "image_data": f"data:image/jpeg;base64,{jpg_as_text}",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
