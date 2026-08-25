@@ -29,6 +29,11 @@ import api from "../../services/api";
 import Module6BehaviorAnalytics from "../module6/Module6BehaviorAnalytics";
 import ShopperFunnelChart from "./ShopperFunnelChart";
 import DwellDistributionChart from "./DwellDistributionChart";
+import HeatmapCanvas from "../heatmap/HeatmapCanvas";
+import ShelfVerticalHeatmap from "../heatmap/ShelfVerticalHeatmap";
+import HotspotDiagnosticPanel from "../heatmap/HotspotDiagnosticPanel";
+import { getJobHeatmap } from "../../services/heatmapService";
+import ProductScoringAnalytics from "./ProductScoringAnalytics";
 
 function ScoreBadge({ score }) {
   const num = typeof score === "number" ? score : parseFloat(score) || 0;
@@ -140,7 +145,7 @@ export default function UnifiedAIJobResultsModal({ isOpen, onClose, job }) {
   const jobId = job?.id;
 
   // Active Main Tab
-  const [activeTab, setActiveTab] = useState("summary"); // summary | heatmaps | matrix | logs | reports
+  const [activeTab, setActiveTab] = useState("summary"); // summary | behavior | heatmaps | scoring | matrix | logs | reports
 
   // Root Consolidated State
   const [unifiedData, setUnifiedData] = useState(null);
@@ -153,6 +158,10 @@ export default function UnifiedAIJobResultsModal({ isOpen, onClose, job }) {
   const [heatmapViewMode, setHeatmapViewMode] = useState("attention"); // attention | movement
   const [heatmapBlobUrl, setHeatmapBlobUrl] = useState(null);
   const [heatmapImgLoading, setHeatmapImgLoading] = useState(false);
+
+  // Module 7 Interactive Heatmap State
+  const [m7HeatmapData, setM7HeatmapData] = useState(null);
+  const [m7HeatmapLoading, setM7HeatmapLoading] = useState(false);
 
   // Shopper Events State
   const [eventsList, setEventsList] = useState([]);
@@ -240,6 +249,22 @@ export default function UnifiedAIJobResultsModal({ isOpen, onClose, job }) {
       loadHeatmapImage(unifiedData.heatmap.image_url);
     }
   }, [activeTab, unifiedData, heatmapBlobUrl, loadHeatmapImage]);
+
+  // Module 7: Lazy-load interactive heatmap data when heatmaps tab activated
+  useEffect(() => {
+    if (activeTab === "heatmaps" && jobId && !m7HeatmapData && !m7HeatmapLoading) {
+      setM7HeatmapLoading(true);
+      getJobHeatmap(jobId)
+        .then((data) => {
+          setM7HeatmapData(data);
+          setM7HeatmapLoading(false);
+        })
+        .catch((err) => {
+          console.warn("Module 7 heatmap fetch error:", err);
+          setM7HeatmapLoading(false);
+        });
+    }
+  }, [activeTab, jobId, m7HeatmapData, m7HeatmapLoading]);
 
   // Load Events when switching to logs tab
   const loadEvents = useCallback(async () => {
@@ -1059,6 +1084,7 @@ export default function UnifiedAIJobResultsModal({ isOpen, onClose, job }) {
             { id: "summary", label: "Executive Summary & Funnel", icon: "📊" },
             { id: "behavior", label: "Consumer Behavior", icon: "🧠" },
             { id: "heatmaps", label: "Spatial & Heatmaps", icon: "🔥" },
+            { id: "scoring", label: "Attractiveness & Scoring", icon: "🎯" },
             { id: "matrix", label: "Shelf & Product Matrix", icon: "📦" },
             { id: "logs", label: "Shopper Journey Logs", icon: "🚶" },
             { id: "reports", label: "Executive Reports", icon: "📝" },
@@ -1359,7 +1385,16 @@ export default function UnifiedAIJobResultsModal({ isOpen, onClose, job }) {
 
 
               {/* ──────────────────────────────────────────────────────────── */}
-              {/* TAB 2: Spatial & Heatmaps (Now TAB 3)                        */}
+              {/* TAB: Attractiveness & Scoring                                */}
+              {/* ──────────────────────────────────────────────────────────── */}
+              {activeTab === "scoring" && (
+                <div className="animate-fade-in">
+                  <ProductScoringAnalytics jobId={jobId} />
+                </div>
+              )}
+
+              {/* ──────────────────────────────────────────────────────────── */}
+              {/* TAB 3: Spatial & Heatmaps                                    */}
               {/* ──────────────────────────────────────────────────────────── */}
               {activeTab === "heatmaps" && (
                 <div className="space-y-6 animate-fade-in">
@@ -1452,6 +1487,53 @@ export default function UnifiedAIJobResultsModal({ isOpen, onClose, job }) {
                       ))}
                     </div>
                   </div>
+
+                  {/* ── Module 7: Interactive Heatmap Canvas ─────────────── */}
+                  <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-5 shadow-xl">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+                      <span>🗺️</span> Interactive Spatial Density Canvas
+                    </h3>
+                    {m7HeatmapLoading ? (
+                      <div className="text-center p-8">
+                        <div className="w-8 h-8 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
+                        <p className="text-xs text-gray-400">Loading interactive heatmap engine...</p>
+                      </div>
+                    ) : m7HeatmapData?.grid ? (
+                      <HeatmapCanvas
+                        gridData={m7HeatmapData.grid}
+                        flowVectors={m7HeatmapData.traffic?.flow_vectors}
+                        hotspotZones={m7HeatmapData.hotspot_diagnostics?.zones}
+                      />
+                    ) : (
+                      <div className="text-center p-6">
+                        <p className="text-sm text-gray-500">Interactive heatmap data not available</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Module 7: Shelf Vertical Gaze Profiles ───────────── */}
+                  {m7HeatmapData?.shelf_heatmaps && m7HeatmapData.shelf_heatmaps.length > 0 && (
+                    <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-5 shadow-xl">
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+                        <span>📊</span> Shelf Vertical Gaze Profiles
+                      </h3>
+                      <div className="space-y-5">
+                        {m7HeatmapData.shelf_heatmaps.map((shelf, idx) => (
+                          <ShelfVerticalHeatmap key={shelf.shelf_id || idx} shelfData={shelf} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Module 7: Hotspot & Dead-Zone Diagnostics ─────────── */}
+                  {m7HeatmapData?.hotspot_diagnostics && (
+                    <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-5 shadow-xl">
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+                        <span>🔥</span> Hotspot & Dead-Zone Diagnostics
+                      </h3>
+                      <HotspotDiagnosticPanel diagnostics={m7HeatmapData.hotspot_diagnostics} />
+                    </div>
+                  )}
                 </div>
               )}
 

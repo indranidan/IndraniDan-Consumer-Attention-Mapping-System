@@ -8,8 +8,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { getStoreById, getZones, getShelves } from "../services/storeService";
+import { getStoreHeatmap, getTrafficHeatmap } from "../services/heatmapService";
 import StatusBadge from "../components/ui/StatusBadge";
 import StoreFloorplanMap from "../components/store/StoreFloorplanMap";
+import HeatmapCanvas from "../components/heatmap/HeatmapCanvas";
 
 export default function StoreDetails() {
   const { id } = useParams();
@@ -18,15 +20,19 @@ export default function StoreDetails() {
   const [store, setStore] = useState(null);
   const [zones, setZones] = useState([]);
   const [shelves, setShelves] = useState([]);
+  const [storeHeatmapData, setStoreHeatmapData] = useState(null);
+  const [trafficHeatmapData, setTrafficHeatmapData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchStore = useCallback(async () => {
     setLoading(true);
     try {
-      const [storeRes, zonesRes, shelvesRes] = await Promise.allSettled([
+      const [storeRes, zonesRes, shelvesRes, heatRes, trafficRes] = await Promise.allSettled([
         getStoreById(id),
         getZones({ store_id: id }),
         getShelves({ store_id: id }),
+        getStoreHeatmap(id),
+        getTrafficHeatmap(id),
       ]);
       if (storeRes.status === "fulfilled") {
         setStore(storeRes.value.data);
@@ -35,6 +41,8 @@ export default function StoreDetails() {
       }
       if (zonesRes.status === "fulfilled") setZones(zonesRes.value.data);
       if (shelvesRes.status === "fulfilled") setShelves(shelvesRes.value.data);
+      if (heatRes.status === "fulfilled") setStoreHeatmapData(heatRes.value);
+      if (trafficRes.status === "fulfilled") setTrafficHeatmapData(trafficRes.value);
     } catch {
       navigate("/stores");
     } finally {
@@ -122,8 +130,20 @@ export default function StoreDetails() {
         onSelectShelf={(s) => navigate(`/shelves?store_id=${store.id}`)}
       />
 
+      {/* ── Multi-Camera Aggregated Heatmap Overlay ───────────────── */}
+      <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-3xl p-6 shadow-xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+          <span>🗺️</span> Aggregated Spatial Heatmap & Traffic Flow
+        </h3>
+        <HeatmapCanvas
+          gridData={storeHeatmapData?.grid}
+          flowVectors={trafficHeatmapData?.flow_vectors}
+          height={600}
+        />
+      </div>
+
       {/* Quick Navigation */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         {[
           {
             label: "Zones",

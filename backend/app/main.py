@@ -37,6 +37,8 @@ from app.api.ai_jobs import router as ai_jobs_router
 from app.api.attention import router as attention_router
 from app.api.interactions import router as interactions_router
 from app.api.behavior import router as behavior_router
+from app.api.heatmaps import router as heatmaps_router
+from app.api.scoring import router as scoring_router
 
 from app.database.database import SessionLocal
 from app.database.mongodb import connect_mongo, close_mongo, get_mongo_client
@@ -75,23 +77,23 @@ async def lifespan(app: FastAPI):
             db_session.execute(text("ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS zone_config JSON;"))
             db_session.commit()
         db_target = settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else "Active"
-        print(f"[INFO] PostgreSQL: Connected [OK] ({db_target})")
+        print(f"[INFO] PostgreSQL: Connected ✅ ({db_target})")
     except Exception as exc:
-        print(f"[WARNING] PostgreSQL: Connection check failed [FAIL] ({exc})")
+        print(f"[WARNING] PostgreSQL: Connection check failed ❌ ({exc})")
 
     # MongoDB status check & connection
     mongo_client = await connect_mongo()
     if mongo_client:
-        print(f"[INFO] MongoDB: Connected [OK] (Database: {settings.MONGODB_DB_NAME})")
+        print(f"[INFO] MongoDB: Connected ✅ (Database: {settings.MONGODB_DB_NAME})")
     else:
-        print(f"[INFO] MongoDB: Fallback Mode [LOCAL] (Local storage active)")
+        print(f"[INFO] MongoDB: Fallback Mode ❌ (Local storage active)")
 
     # Google OAuth status check
     if settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET:
         cid_preview = settings.GOOGLE_CLIENT_ID[:12] + "..." if len(settings.GOOGLE_CLIENT_ID) > 15 else settings.GOOGLE_CLIENT_ID
-        print(f"[INFO] Google OAuth: Configured [OK] (Client ID: {cid_preview})")
+        print(f"[INFO] Google OAuth: Configured ✅ (Client ID: {cid_preview})")
     else:
-        print("[INFO] Google OAuth: Not configured [DISABLED]")
+        print("[INFO] Google OAuth: Not configured ❌")
 
     import asyncio
     from app.core.job_stream import job_stream_manager
@@ -114,11 +116,12 @@ app = FastAPI(
         "Module 4: Attention Analysis Engine (Gaze, Head Pose, Shelf & Product Engagement). "
         "Module 5: Product Interaction Analysis Module (Viewed, Pickup, Return, Comparison, Shelf Interaction). "
         "Module 6: Consumer Behavior Intelligence Engine (Shopper Segmentation, Journeys, Transitions). "
+        "Module 8: Product Attractiveness Scoring Engine (5-Pillar Scoring, Bayesian Smoothing, Shelf Visibility). "
         "Provides user registration, login, JWT auth, Google OAuth, "
         "role-based permissions, full retail store management, "
         "and advanced shopper behavior & product interaction analytics."
     ),
-    version="6.0.0",
+    version="8.0.0",
     lifespan=lifespan,
 )
 
@@ -166,6 +169,12 @@ app.include_router(interactions_router)
 # Consumer Behavior Intelligence Engine
 app.include_router(behavior_router)
 
+# Module 7: Attention Heatmap Engine
+app.include_router(heatmaps_router)
+
+# Module 8: Product Attractiveness Scoring Engine
+app.include_router(scoring_router)
+
 
 # ── Health Check ──────────────────────────────────────────────
 @app.get(
@@ -208,8 +217,10 @@ def health_check():
             "Attention Analysis Engine",
             "Product Interaction Analysis Module",
             "Consumer Behavior Intelligence Engine",
+            "Attention Heatmap Engine",
+            "Product Attractiveness Scoring Engine",
         ],
-        "version": "6.0.0",
+        "version": "8.0.0",
     }
 
 
