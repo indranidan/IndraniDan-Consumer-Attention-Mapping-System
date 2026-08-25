@@ -432,7 +432,36 @@ def run_pipeline(
             except Exception as m6_exc:
                 _logger.warning(f"Could not auto-generate Module 6 analysis for job {job_id}: {m6_exc}")
 
-            # 5. Mark job COMPLETED and broadcast state to UI
+            # 5. Pre-warm & persist Module 8 Product Attractiveness Scoring
+            try:
+                from app.services.scoring_service import get_or_run_module8_analysis
+                m8_db: Session = SessionLocal()
+                try:
+                    get_or_run_module8_analysis(m8_db, job_id, force_rerun=True)
+                    _logger.info(f"Module 8 Product Attractiveness Scoring pre-warmed and persisted for job {job_id}")
+                finally:
+                    m8_db.close()
+            except Exception as m8_exc:
+                _logger.warning(f"Could not auto-generate Module 8 scoring for job {job_id}: {m8_exc}")
+
+            # Enrich job summary with Module 8 product attractiveness metrics
+            try:
+                from app.services.scoring_service import _get_m8_analysis
+                m8_data = _get_m8_analysis(str(job_id))
+                if m8_data and m8_data.get("summary"):
+                    m8_sum = m8_data["summary"]
+                    summary["product_attractiveness"] = {
+                        "total_products_scored": m8_sum.get("total_products_scored", 0),
+                        "average_attractiveness_score": m8_sum.get("average_attractiveness_score", 0.0),
+                        "top_performer_name": m8_sum.get("top_performer_name"),
+                        "top_performer_score": m8_sum.get("top_performer_score", 0.0),
+                        "bottom_performer_name": m8_sum.get("bottom_performer_name"),
+                        "bottom_performer_score": m8_sum.get("bottom_performer_score", 0.0),
+                    }
+            except Exception as m8_sum_exc:
+                _logger.warning(f"Could not enrich summary with Module 8 metrics: {m8_sum_exc}")
+
+            # 6. Mark job COMPLETED and broadcast state to UI
             _update_job_status(
                 job_id,
                 "COMPLETED",
