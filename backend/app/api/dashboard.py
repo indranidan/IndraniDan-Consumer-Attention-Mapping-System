@@ -93,22 +93,30 @@ def get_dashboard_stats(
     return res
 
 
+import uuid
+from typing import Optional
+from fastapi import Query
+
+
 @router.get(
     "/analytics",
-    summary="Get aggregated executive dashboard analytics",
+    summary="Get aggregated executive retail intelligence analytics",
 )
 def get_dashboard_analytics(
+    store_id: Optional[uuid.UUID] = Query(default=None, description="Optional store ID for deep-dive analytics"),
+    force_fresh: bool = Query(default=False, description="Bypass in-memory cache"),
     response: Response = None,
     current_user: User = Depends(any_role),
     db: Session = Depends(get_db),
 ):
     """
-    Returns aggregated cross-store KPIs, top shelf attention metrics,
-    recent jobs activity, and weekly traffic trends.
+    Returns unified executive-level retail intelligence synthesized across
+    Modules 3 through 9 (Footfall, Gaze, Interactions, Archetypes, Scoring, Recs).
+    Supports fleet-wide overview or single-store filtering.
     """
     if response:
         response.headers["Cache-Control"] = "public, max-age=20, stale-while-revalidate=40"
     from app.services.dashboard_service import get_dashboard_analytics_data
-    return get_dashboard_analytics_data(db)
+    return get_dashboard_analytics_data(db, store_id=store_id, force_fresh=force_fresh)
 
 

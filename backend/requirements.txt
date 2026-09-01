@@ -42,3 +42,4 @@ itsdangerous==2.2.0
 # Real-Time Event Bus
 # ========================
 redis>=5.0.0
+redis 

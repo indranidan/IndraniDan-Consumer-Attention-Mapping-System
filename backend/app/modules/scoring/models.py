@@ -240,6 +240,7 @@ class Module8Summary:
     bottom_performer_name: Optional[str] = None
     bottom_performer_score: float = 0.0
     average_confidence: float = 0.0
+    insufficient_data: bool = False
     config_hash: Optional[str] = None
     analyzed_at: Optional[str] = None
     version: str = "1.0"
@@ -261,6 +262,7 @@ class Module8Summary:
             "bottom_performer_name": self.bottom_performer_name,
             "bottom_performer_score": round(self.bottom_performer_score, 2),
             "average_confidence": round(self.average_confidence, 4),
+            "insufficient_data": self.insufficient_data,
             "config_hash": self.config_hash,
             "analyzed_at": self.analyzed_at,
             "version": self.version,

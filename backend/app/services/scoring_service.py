@@ -191,42 +191,8 @@ def _get_m8_analysis(job_id: str) -> Optional[Dict[str, Any]]:
 def get_module8_scores(db: Session, job_id: uuid.UUID) -> Module8AnalysisResponse:
     """
     Retrieve existing Module 8 scoring results for a job.
-    If no analysis has been executed yet, runs it on demand.
+    If no analysis has been executed yet or configuration has changed, runs it on demand.
     """
-    job = db.query(AIJob).filter(AIJob.id == job_id).first()
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"AI job with id '{job_id}' not found.",
-        )
-
-    if job.status != "COMPLETED":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Job is not completed yet (status: {job.status}).",
-        )
-
-    # Try cached result first
-    existing_analysis = _get_m8_analysis(str(job_id))
-
-    # Also try disk fallback
-    if not existing_analysis:
-        project_root = _get_project_root()
-        if job.output_path:
-            op = Path(job.output_path)
-            output_dir = op if op.is_absolute() else (project_root / op)
-            disk_file = output_dir / "module8" / "module8_scoring_report.json"
-            if disk_file.exists():
-                try:
-                    with open(disk_file, "r", encoding="utf-8") as f:
-                        existing_analysis = json.load(f)
-                except Exception:
-                    pass
-
-    if existing_analysis:
-        return _build_analysis_response_from_dict(job, existing_analysis)
-
-    # Run on demand
     return get_or_run_module8_analysis(db, job_id, force_rerun=False)
 
 

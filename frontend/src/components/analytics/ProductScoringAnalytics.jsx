@@ -15,7 +15,12 @@ import {
   CartesianGrid,
   Cell
 } from "recharts";
-import { getScoringAnalysis, getScoringLeaderboard } from "../../services/scoringService";
+import {
+  getScoringAnalysis,
+  getScoringLeaderboard,
+  runScoringAnalysis,
+  invalidateScoringCache
+} from "../../services/scoringService";
 
 function ScoreBadge({ score }) {
   const num = typeof score === "number" ? score : parseFloat(score) || 0;
@@ -35,35 +40,98 @@ function ScoreBadge({ score }) {
   );
 }
 
+// Custom High-Contrast Tooltip for Scatter Yield Matrix
+function CustomScatterTooltip({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const data = payload[0].payload;
+  if (!data) return null;
+
+  return (
+    <div className="p-3.5 bg-gray-950/95 border border-gray-700/90 rounded-xl shadow-2xl backdrop-blur-md text-xs space-y-2 min-w-[200px] pointer-events-none">
+      <div className="font-bold text-white text-sm pb-1.5 border-b border-gray-800 flex items-center justify-between gap-2">
+        <span className="truncate max-w-[140px] text-gray-100">{data.name}</span>
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+          data.rating === 'A' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
+          data.rating === 'B' ? "bg-sky-500/20 text-sky-400 border border-sky-500/30" :
+          data.rating === 'C' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
+          "bg-red-500/20 text-red-400 border border-red-500/30"
+        }`}>
+          {data.rating}
+        </span>
+      </div>
+      <div className="flex justify-between items-center text-gray-200">
+        <span className="text-gray-400 font-medium">Attractiveness:</span>
+        <span className="font-mono font-bold text-violet-400">
+          {typeof data.y === 'number' ? data.y.toFixed(1) : data.y} / 100
+        </span>
+      </div>
+      <div className="flex justify-between items-center text-gray-200">
+        <span className="text-gray-400 font-medium">Foot Traffic:</span>
+        <span className="font-mono font-semibold text-emerald-400">{data.x} viewers</span>
+      </div>
+      <div className="flex justify-between items-center text-gray-200">
+        <span className="text-gray-400 font-medium">Interactions:</span>
+        <span className="font-mono font-semibold text-sky-400">{data.z} events</span>
+      </div>
+    </div>
+  );
+}
+
 export default function ProductScoringAnalytics({ jobId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [leaderboard, setLeaderboard] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  useEffect(() => {
-    async function loadData() {
-      if (!jobId) return;
-      try {
-        setLoading(true);
-        const [scores, leaders] = await Promise.all([
-          getScoringAnalysis(jobId),
-          getScoringLeaderboard(jobId, 5)
-        ]);
-        setAnalysis(scores);
-        setLeaderboard(leaders);
-        if (scores?.products?.length > 0) {
-          setSelectedProduct(scores.products[0]);
-        }
-      } catch (err) {
-        setError("Failed to load Module 8 scoring analytics.");
-      } finally {
-        setLoading(false);
+  const loadData = async () => {
+    if (!jobId) return;
+    try {
+      setLoading(true);
+      const [scores, leaders] = await Promise.all([
+        getScoringAnalysis(jobId),
+        getScoringLeaderboard(jobId, 5)
+      ]);
+      setAnalysis(scores);
+      setLeaderboard(leaders);
+      if (scores?.products?.length > 0) {
+        setSelectedProduct(scores.products[0]);
       }
+    } catch (err) {
+      setError("Failed to load Module 8 scoring analytics.");
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
   }, [jobId]);
+
+  const handleRecalculate = async () => {
+    if (!jobId || refreshing) return;
+    try {
+      setRefreshing(true);
+      setError(null);
+      invalidateScoringCache(`scores:${jobId}`);
+      invalidateScoringCache(`leaderboard:${jobId}`);
+      await runScoringAnalysis(jobId);
+      const [scores, leaders] = await Promise.all([
+        getScoringAnalysis(jobId),
+        getScoringLeaderboard(jobId, 5)
+      ]);
+      setAnalysis(scores);
+      setLeaderboard(leaders);
+      if (scores?.products?.length > 0) {
+        setSelectedProduct(scores.products[0]);
+      }
+    } catch (err) {
+      setError("Failed to recalculate scoring analysis.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -109,6 +177,69 @@ export default function ProductScoringAnalytics({ jobId }) {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Top Header with KPI stats and Re-evaluate button */}
+      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-gray-900/60 border border-gray-800/80">
+        <div className="flex flex-wrap items-center gap-6 text-xs">
+          <div>
+            <span className="text-gray-400">Products Scored: </span>
+            <span className="font-bold text-white font-mono">{analysis.summary?.total_products_scored || 0}</span>
+          </div>
+          <div>
+            <span className="text-gray-400">Avg Attractiveness: </span>
+            <span className="font-bold text-emerald-400 font-mono">
+              {(analysis.summary?.average_attractiveness_score || 0).toFixed(1)} / 100
+            </span>
+          </div>
+          {analysis.summary?.top_performer_name && (
+            <div>
+              <span className="text-gray-400">Top Performer: </span>
+              <span className="font-semibold text-white">
+                {analysis.summary.top_performer_name} ({(analysis.summary.top_performer_score || 0).toFixed(1)})
+              </span>
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={handleRecalculate}
+          disabled={refreshing}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all shadow-md ${
+            refreshing
+              ? "bg-violet-600/50 text-violet-200 cursor-not-allowed"
+              : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-violet-600/20"
+          }`}
+          title="Re-compute all 5-pillar product attractiveness scores using updated telemetry"
+        >
+          <svg
+            className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          <span>{refreshing ? "Recalculating..." : "Re-evaluate Scores"}</span>
+        </button>
+      </div>
+
+      {/* Task 5.1: Insufficient data warning banner */}
+      {analysis.summary?.insufficient_data && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+          <span className="text-amber-400 text-lg mt-0.5">⚠️</span>
+          <div>
+            <p className="text-sm font-semibold text-amber-400 mb-1">Insufficient Observation Data</p>
+            <p className="text-xs text-amber-300/80 leading-relaxed">
+              Scores shown are estimated from Bayesian priors and may not reflect actual product performance.
+              Configure spatial product mapping or collect more video data for accurate scoring.
+            </p>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Leaderboards */}
         <div className="md:col-span-1 flex flex-col gap-6">
@@ -179,12 +310,13 @@ export default function ProductScoringAnalytics({ jobId }) {
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
                   <PolarGrid stroke="#374151" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: "#9ca3af", fontSize: 11 }} />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: "#cbd5e1", fontSize: 11 }} />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                   <Radar name="Score" dataKey="A" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.4} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: "#111827", borderColor: "#374151", borderRadius: "8px" }}
-                    itemStyle={{ color: "#c4b5fd" }}
+                    contentStyle={{ backgroundColor: "#030712", borderColor: "#4b5563", borderRadius: "10px", color: "#f3f4f6" }}
+                    itemStyle={{ color: "#c4b5fd", fontSize: "12px", fontWeight: "600" }}
+                    labelStyle={{ color: "#f9fafb", fontSize: "12px", fontWeight: "bold" }}
                   />
                 </RadarChart>
               </ResponsiveContainer>
@@ -242,35 +374,33 @@ export default function ProductScoringAnalytics({ jobId }) {
           <span>📈</span> Traffic vs Attractiveness Yield Matrix
         </h3>
         <ResponsiveContainer width="100%" height="90%">
-          <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
+          <ScatterChart margin={{ top: 20, right: 20, bottom: 25, left: 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis 
               type="number" 
               dataKey="x" 
               name="Traffic (Viewers)" 
-              stroke="#9ca3af" 
-              label={{ value: "Foot Traffic (Viewers)", position: "insideBottom", offset: -10, fill: "#9ca3af", fontSize: 12 }} 
+              stroke="#94a3b8" 
+              tick={{ fill: "#cbd5e1", fontSize: 11 }}
+              label={{ value: "Foot Traffic (Viewers)", position: "insideBottom", offset: -12, fill: "#cbd5e1", fontSize: 12, fontWeight: 500 }} 
             />
             <YAxis 
               type="number" 
               dataKey="y" 
               name="Attractiveness Score" 
-              stroke="#9ca3af"
+              stroke="#94a3b8"
               domain={[0, 100]}
-              label={{ value: "Score", angle: -90, position: "insideLeft", fill: "#9ca3af", fontSize: 12 }} 
+              tick={{ fill: "#cbd5e1", fontSize: 11 }}
+              label={{ value: "Attractiveness Score (0-100)", angle: -90, position: "insideLeft", offset: 5, fill: "#cbd5e1", fontSize: 12, fontWeight: 500 }} 
             />
-            <ZAxis type="number" dataKey="z" range={[50, 400]} name="Interactions" />
+            <ZAxis type="number" dataKey="z" range={[60, 400]} name="Interactions" />
             <Tooltip 
-              cursor={{ strokeDasharray: '3 3' }}
-              contentStyle={{ backgroundColor: "#111827", borderColor: "#374151", borderRadius: "8px" }}
-              formatter={(value, name, props) => {
-                if (name === "Attractiveness Score") return [value.toFixed(1), name];
-                return [value, name];
-              }}
+              cursor={{ strokeDasharray: '3 3', stroke: '#64748b' }}
+              content={<CustomScatterTooltip />}
             />
             <Scatter name="Products" data={scatterData}>
               {scatterData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={ratingColors[entry.rating] || "#8b5cf6"} fillOpacity={0.7} />
+                <Cell key={`cell-${index}`} fill={ratingColors[entry.rating] || "#8b5cf6"} fillOpacity={0.85} />
               ))}
             </Scatter>
           </ScatterChart>

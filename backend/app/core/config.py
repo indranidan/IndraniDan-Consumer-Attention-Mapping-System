@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     MONGODB_URL: str = "mongodb://localhost:27017"
     MONGODB_DB_NAME: str = "consumer_attention_ai_db"
 
+    # ── Redis / Event Broker ──────────────────────────────────
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     # ── JWT ───────────────────────────────────────────────────
     SECRET_KEY: str = "change-this-in-production"
     ALGORITHM: str = "HS256"

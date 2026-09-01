@@ -21,6 +21,7 @@ from pymongo.database import Database as SyncDatabase
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.database.mongodb import get_mongo_db, get_sync_mongo_db
+from app.core.redis_client import redis_client
 
 logger = logging.getLogger("ai_document_repository")
 
@@ -42,15 +43,27 @@ class AIDocumentRepository:
     COLL_MODULE6_ANALYSES = "module6_consumer_behavior"
 
     # In-memory store for fallback / offline test execution
-    _memory_store: Dict[str, Dict[str, Any]] = {
-        "job_reports": {},
-        "m4": {},
-        "m5": {},
-        "m6": {},
-        "shopper_journeys": {},
-        "attn_events": {},
-        "int_events": {},
-    }
+    _memory_store: Dict[str, Dict[str, Any]] = {}
+
+    @classmethod
+    def _cache_set(cls, prefix: str, key: str, data: Any):
+        cls._memory_store.setdefault(prefix, {})[key] = data
+        if redis_client:
+            try:
+                redis_client.setex(f"ai_repo:{prefix}:{key}", 3600, json.dumps(data, default=str))
+            except Exception as e:
+                logger.warning(f"Redis cache set failed: {e}")
+
+    @classmethod
+    def _cache_get(cls, prefix: str, key: str) -> Optional[Any]:
+        if redis_client:
+            try:
+                val = redis_client.get(f"ai_repo:{prefix}:{key}")
+                if val:
+                    return json.loads(val)
+            except Exception as e:
+                logger.warning(f"Redis cache get failed: {e}")
+        return cls._memory_store.get(prefix, {}).get(key)
 
     @classmethod
     def ensure_indexes_sync(cls, db: SyncDatabase) -> None:
@@ -127,7 +140,7 @@ class AIDocumentRepository:
                         upsert=True,
                     )
                 else:
-                    cls._memory_store["job_reports"][job_id_str] = doc
+                    cls._cache_set("job_reports", job_id_str, doc)
 
             # 2. Ingest Shopper Journeys & Trajectories (Phases 3 & 4)
             sessions_file = output_dir / "phase3" / "reports" / "sessions.json"
@@ -182,7 +195,7 @@ class AIDocumentRepository:
                             db[cls.COLL_SHOPPER_JOURNEYS].delete_many({"job_id": job_id_str})
                             db[cls.COLL_SHOPPER_JOURNEYS].insert_many(journey_docs)
                         else:
-                            cls._memory_store["shopper_journeys"][job_id_str] = journey_docs
+                            cls._cache_set("shopper_journeys", job_id_str, journey_docs)
                 except Exception as exc:
                     logger.warning(f"Error ingesting shopper journeys: {exc}")
 
@@ -204,7 +217,7 @@ class AIDocumentRepository:
                             db[cls.COLL_ATTENTION_EVENTS].delete_many({"job_id": job_id_str})
                             db[cls.COLL_ATTENTION_EVENTS].insert_many(mongo_events)
                         else:
-                            cls._memory_store["attn_events"][job_id_str] = mongo_events
+                            cls._cache_set("attn_events", job_id_str, mongo_events)
                 except Exception as exc:
                     logger.warning(f"Error ingesting attention events: {exc}")
 
@@ -229,7 +242,7 @@ class AIDocumentRepository:
         }
 
         # Always update memory store for instantaneous fallback
-        cls._memory_store["m4"][job_id_str] = doc
+        cls._cache_set("m4", job_id_str, doc)
 
         if events:
             mongo_evts = []
@@ -238,7 +251,7 @@ class AIDocumentRepository:
                 e["job_id"] = job_id_str
                 e["track_id"] = int(e.get("track_id") or e.get("tracking_id") or 0)
                 mongo_evts.append(e)
-            cls._memory_store["attn_events"][job_id_str] = mongo_evts
+            cls._cache_set("attn_events", job_id_str, mongo_evts)
 
         db = get_sync_mongo_db()
         if db is not None:
@@ -270,7 +283,7 @@ class AIDocumentRepository:
             "analysis": analysis_data,
         }
 
-        cls._memory_store["m5"][job_id_str] = doc
+        cls._cache_set("m5", job_id_str, doc)
 
         if events:
             mongo_evts = []
@@ -279,7 +292,7 @@ class AIDocumentRepository:
                 e["job_id"] = job_id_str
                 e["track_id"] = int(e.get("track_id") or e.get("tracking_id") or 0)
                 mongo_evts.append(e)
-            cls._memory_store["int_events"][job_id_str] = mongo_evts
+            cls._cache_set("int_events", job_id_str, mongo_evts)
 
         db = get_sync_mongo_db()
         if db is not None:
@@ -306,7 +319,7 @@ class AIDocumentRepository:
         job_id_str = str(job_id)
         
         # Always update memory store for instantaneous fallback
-        cls._memory_store["m6"][job_id_str] = analysis_data
+        cls._cache_set("m6", job_id_str, analysis_data)
 
         db = get_sync_mongo_db()
         if db is not None:
@@ -328,7 +341,7 @@ class AIDocumentRepository:
             doc = db[cls.COLL_MODULE4_ANALYSES].find_one({"job_id": job_id}, {"_id": 0})
             if doc:
                 return doc.get("analysis")
-        mem_doc = cls._memory_store.get("m4", {}).get(job_id)
+        mem_doc = cls._cache_get("m4", job_id)
         return mem_doc.get("analysis") if mem_doc else None
 
     @classmethod
@@ -338,7 +351,7 @@ class AIDocumentRepository:
             doc = db[cls.COLL_MODULE5_ANALYSES].find_one({"job_id": job_id}, {"_id": 0})
             if doc:
                 return doc.get("analysis")
-        mem_doc = cls._memory_store.get("m5", {}).get(job_id)
+        mem_doc = cls._cache_get("m5", job_id)
         return mem_doc.get("analysis") if mem_doc else None
 
     @classmethod
@@ -348,7 +361,7 @@ class AIDocumentRepository:
             doc = db[cls.COLL_MODULE6_ANALYSES].find_one({"job_id": job_id}, {"_id": 0})
             if doc:
                 return doc
-        return cls._memory_store.get("m6", {}).get(job_id)
+        return cls._cache_get("m6", job_id)
 
     @classmethod
     def get_batch_module4_analyses_sync(cls, job_ids: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -371,8 +384,10 @@ class AIDocumentRepository:
                 logger.warning(f"Batch M4 query failed: {exc}")
 
         for jid in job_ids:
-            if jid not in results and jid in cls._memory_store.get("m4", {}):
-                results[jid] = cls._memory_store["m4"][jid].get("analysis", {})
+            if jid not in results:
+                cached = cls._cache_get("m4", jid)
+                if cached:
+                    results[jid] = cached.get("analysis", {})
         return results
 
     @classmethod
@@ -396,8 +411,10 @@ class AIDocumentRepository:
                 logger.warning(f"Batch M5 query failed: {exc}")
 
         for jid in job_ids:
-            if jid not in results and jid in cls._memory_store.get("m5", {}):
-                results[jid] = cls._memory_store["m5"][jid].get("analysis", {})
+            if jid not in results:
+                cached = cls._cache_get("m5", jid)
+                if cached:
+                    results[jid] = cached.get("analysis", {})
         return results
 
     @classmethod
@@ -421,9 +438,10 @@ class AIDocumentRepository:
                 logger.warning(f"Batch M6 query failed: {exc}")
 
         for jid in job_ids:
-            if jid not in results and jid in cls._memory_store.get("m6", {}):
-                mem = cls._memory_store["m6"][jid]
-                results[jid] = mem.get("analysis", {}) or mem
+            if jid not in results:
+                mem = cls._cache_get("m6", jid) or {}
+                if mem:
+                    results[jid] = mem.get("analysis", {}) or mem
         return results
 
     @classmethod
@@ -435,12 +453,12 @@ class AIDocumentRepository:
             if doc:
                 return doc
         if collection_name == cls.COLL_MODULE6_ANALYSES:
-            return cls._memory_store.get("m6", {}).get(job_id)
+            return cls._cache_get("m6", job_id)
         if collection_name == cls.COLL_MODULE5_ANALYSES:
-            return cls._memory_store.get("m5", {}).get(job_id)
+            return cls._cache_get("m5", job_id)
         if collection_name == cls.COLL_MODULE4_ANALYSES:
-            return cls._memory_store.get("m4", {}).get(job_id)
-        return cls._memory_store.get(collection_name, {}).get(job_id)
+            return cls._cache_get("m4", job_id)
+        return cls._cache_get(collection_name, job_id)
 
     @classmethod
     def get_attention_events_sync(
@@ -470,7 +488,7 @@ class AIDocumentRepository:
             return list(cursor), total
 
         # Fallback to in-memory store
-        events = cls._memory_store.get("attn_events", {}).get(job_id, [])
+        events = (cls._cache_get("attn_events", job_id) or [])
         filtered = []
         for ev in events:
             if track_id is not None and ev.get("track_id") != track_id:
@@ -518,7 +536,7 @@ class AIDocumentRepository:
             return list(cursor), total
 
         # Fallback to in-memory store
-        events = cls._memory_store.get("int_events", {}).get(job_id, [])
+        events = (cls._cache_get("int_events", job_id) or [])
         filtered = []
         for ev in events:
             if track_id is not None and ev.get("track_id") != track_id:
@@ -544,7 +562,7 @@ class AIDocumentRepository:
         mongo = db or get_mongo_db()
         if mongo is not None:
             return await mongo[cls.COLL_JOB_REPORTS].find_one({"job_id": job_id}, {"_id": 0})
-        return cls._memory_store.get("job_reports", {}).get(job_id)
+        return cls._cache_get("job_reports", job_id)
 
     @classmethod
     async def get_shopper_journey_async(
@@ -555,7 +573,7 @@ class AIDocumentRepository:
             return await mongo[cls.COLL_SHOPPER_JOURNEYS].find_one(
                 {"job_id": job_id, "tracking_id": tracking_id}, {"_id": 0}
             )
-        journeys = cls._memory_store.get("shopper_journeys", {}).get(job_id, [])
+        journeys = (cls._cache_get("shopper_journeys", job_id) or [])
         for j in journeys:
             if j.get("tracking_id") == tracking_id:
                 return j
@@ -571,7 +589,7 @@ class AIDocumentRepository:
                 {"job_id": job_id}, {"_id": 0}
             ).skip(skip).limit(limit)
             return await cursor.to_list(length=limit)
-        journeys = cls._memory_store.get("shopper_journeys", {}).get(job_id, [])
+        journeys = (cls._cache_get("shopper_journeys", job_id) or [])
         return journeys[skip : skip + limit]
 
     @classmethod
@@ -579,4 +597,4 @@ class AIDocumentRepository:
         mongo = db or get_mongo_db()
         if mongo is not None:
             return await mongo[cls.COLL_MODULE6_ANALYSES].find_one({"job_id": job_id}, {"_id": 0})
-        return cls._memory_store.get("m6", {}).get(job_id)
+        return cls._cache_get("m6", job_id)
