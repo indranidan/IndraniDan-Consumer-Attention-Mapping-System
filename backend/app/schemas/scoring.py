@@ -102,6 +102,7 @@ class Module8SummarySchema(BaseModel):
     bottom_performer_name: Optional[str] = None
     bottom_performer_score: float = 0.0
     average_confidence: float = 0.0
+    insufficient_data: bool = False
     config_hash: Optional[str] = None
     analyzed_at: Optional[str] = None
     version: str = "1.0"

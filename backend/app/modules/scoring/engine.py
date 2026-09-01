@@ -343,6 +343,13 @@ class Module8ScoringEngine:
         # Compute total footfall from tracking data
         total_footfall = m3_data.get("total_unique_shoppers", 0)
 
+        # Build shelf-to-product counts for equal distribution (Task 3.1)
+        shelf_product_counts: Dict[str, int] = {}
+        for prod in configured_products:
+            p_shelf_id = str(prod.get("shelf_id", ""))
+            if p_shelf_id:
+                shelf_product_counts[p_shelf_id] = shelf_product_counts.get(p_shelf_id, 0) + 1
+
         # Score each product
         profiles: List[ProductScoreProfile] = []
         for prod in configured_products:
@@ -353,8 +360,9 @@ class Module8ScoringEngine:
             p_shelf_id = str(prod.get("shelf_id", ""))
 
             shelf_info = shelf_lookup.get(p_shelf_id, {})
-            shelf_name = shelf_info.get("name", "")
-            shelf_cat = shelf_info.get("category", "")
+            shelf_name = shelf_info.get("name", "") or prod.get("shelf_name", "")
+            shelf_code = shelf_info.get("shelf_code", "")
+            shelf_cat = shelf_info.get("category", "") or prod.get("shelf_category", "")
 
             # Extract product telemetry from M4/M5 data
             m4_product = m4_data.get("products", {}).get(pid, {})
@@ -373,8 +381,54 @@ class Module8ScoringEngine:
             repeats = m5_product.get("repeat_interactions", 0)
             unique_shop = m5_product.get("unique_viewers", 0) or viewers
 
-            # Shelf-level telemetry
-            m4_shelf = m4_data.get("shelves", {}).get(p_shelf_id, {})
+            # Robust M4 shelf resolution (checks ID, shelf_code, name, and normalized keys)
+            m4_shelves = m4_data.get("shelves", {})
+            m4_shelf = (
+                m4_shelves.get(p_shelf_id)
+                or (shelf_code and m4_shelves.get(shelf_code))
+                or (shelf_name and m4_shelves.get(shelf_name))
+                or (shelf_name and m4_shelves.get(shelf_name.lower().replace(" ", "_")))
+                or {}
+            )
+
+            # Task 3.2: Distribute shelf-level M4 attention to products
+            # when per-product telemetry is empty
+            if not m4_product and m4_shelf and (p_shelf_id or shelf_name):
+                n_products = max(1, shelf_product_counts.get(p_shelf_id, 1))
+                shelf_v = m4_shelf.get("viewers", 0)
+                shelf_attn = m4_shelf.get("shelf_attention_time_sec", 0.0)
+                if shelf_v > 0:
+                    viewers = max(viewers, int(shelf_v / n_products) or 1)
+                if shelf_attn > 0:
+                    attn_dur = max(attn_dur, shelf_attn / n_products)
+                if unique_shop == 0:
+                    unique_shop = viewers
+
+            # Task 3.3: Distribute shelf-level M5 interactions to products
+            # when per-product interaction telemetry is all-zero
+            m5_product_is_zero = (
+                m5_product.get("views", 0) == 0
+                and m5_product.get("unique_viewers", 0) == 0
+            )
+            if m5_product_is_zero:
+                m5_summary = m5_data.get("summary", {})
+                if m4_shelf.get("viewers", 0) > 0:
+                    n_products = max(1, shelf_product_counts.get(p_shelf_id, 1))
+                    distributed_views = max(1, int(m4_shelf.get("viewers", 0) / n_products))
+                    interactions = max(interactions, distributed_views)
+                    if viewers == 0:
+                        viewers = max(1, distributed_views)
+                    if unique_shop == 0:
+                        unique_shop = viewers
+                elif m5_summary.get("total_views", 0) > 0:
+                    total_prods = max(1, len(configured_products))
+                    distributed_views = max(0, int(m5_summary.get("total_views", 0) / total_prods))
+                    if distributed_views > 0:
+                        interactions = max(interactions, distributed_views)
+                    distributed_dur = m5_summary.get("total_view_duration_sec", 0.0) / total_prods
+                    if attn_dur == 0.0 and distributed_dur > 0:
+                        attn_dur = distributed_dur
+
             shelf_viewers_count = m4_shelf.get("viewers", 0)
 
             profile = self.score_product(
@@ -411,7 +465,7 @@ class Module8ScoringEngine:
     def _build_summary(self, profiles: List[ProductScoreProfile]) -> Module8Summary:
         """Build Module8Summary from scored profiles."""
         if not profiles:
-            return Module8Summary()
+            return Module8Summary(insufficient_data=True)
 
         sorted_profiles = sorted(
             profiles, key=lambda p: p.attractiveness_score, reverse=True
@@ -420,6 +474,9 @@ class Module8ScoringEngine:
         bottom = sorted_profiles[-1]
         avg_score = sum(p.attractiveness_score for p in profiles) / len(profiles)
         avg_conf = sum(p.confidence.confidence_score for p in profiles) / len(profiles)
+
+        # Task 4.2: Flag insufficient data when all products have zero viewers
+        all_zero_viewers = all(p.total_viewers == 0 for p in profiles)
 
         return Module8Summary(
             total_products_scored=len(profiles),
@@ -431,6 +488,7 @@ class Module8ScoringEngine:
             bottom_performer_name=bottom.product_name,
             bottom_performer_score=bottom.attractiveness_score,
             average_confidence=round(avg_conf, 4),
+            insufficient_data=all_zero_viewers,
         )
 
     # ── Upstream Data Loading ──────────────────────────────────────
@@ -439,32 +497,57 @@ class Module8ScoringEngine:
         """Load Module 4 attention analysis outputs."""
         result: Dict[str, Any] = {"products": {}, "shelves": {}}
 
-        # Try target attention summary
-        attn_file = output_dir / "phase5" / "reports" / "target_attention_summary.json"
-        if attn_file.exists():
+        # Task 2.1: Load from module4/module4_attention_report.json (richer data)
+        m4_report_file = output_dir / "module4" / "module4_attention_report.json"
+        if m4_report_file.exists():
             try:
-                data = json.loads(attn_file.read_text(encoding="utf-8"))
-                # Parse product attention metrics
-                for item in data.get("product_metrics", []):
-                    pid = str(item.get("product_id", ""))
-                    if pid:
-                        result["products"][pid] = {
-                            "viewers": item.get("viewers", 0),
-                            "total_focus_duration_sec": item.get("total_focus_duration_sec", 0.0),
-                            "average_focus_duration_sec": item.get("average_focus_duration_sec", 0.0),
-                            "attention_events": item.get("attention_events", 0),
-                        }
-                # Parse shelf attention metrics
-                for item in data.get("shelf_metrics", []):
+                data = json.loads(m4_report_file.read_text(encoding="utf-8"))
+                # Parse shelf attention metrics from the shelves array
+                for item in data.get("shelves", []):
                     sid = str(item.get("shelf_id", ""))
                     if sid:
                         result["shelves"][sid] = {
                             "viewers": item.get("viewers", 0),
                             "visitors": item.get("visitors", 0),
                             "dwell_time_sec": item.get("dwell_time_sec", 0.0),
+                            "shelf_attention_time_sec": item.get("shelf_attention_time_sec", 0.0),
+                            "attention_event_count": item.get("attention_event_count", 0),
                         }
             except Exception as exc:
-                self.logger.warning(f"Could not load Module 4 data: {exc}")
+                self.logger.warning(f"Could not load Module 4 report: {exc}")
+
+        # Task 2.2: Also try target attention summary using correct key "targets"
+        attn_file = output_dir / "phase5" / "reports" / "target_attention_summary.json"
+        if attn_file.exists():
+            try:
+                data = json.loads(attn_file.read_text(encoding="utf-8"))
+                # Parse targets (shelf-level and product-level attention)
+                for item in data.get("targets", []):
+                    target_type = item.get("target_type", "")
+                    target_id = str(item.get("target_id", ""))
+                    if not target_id:
+                        continue
+                    if target_type == "shelf":
+                        # Only populate if not already loaded from M4 report
+                        if target_id not in result["shelves"]:
+                            result["shelves"][target_id] = {
+                                "viewers": item.get("unique_shoppers", 0),
+                                "visitors": item.get("unique_shoppers", 0),
+                                "dwell_time_sec": item.get("total_attention_sec", 0.0),
+                                "shelf_attention_time_sec": item.get("total_attention_sec", 0.0),
+                                "attention_event_count": item.get("attention_event_count", 0),
+                            }
+                    elif target_type == "product":
+                        pid = target_id
+                        if pid not in result["products"]:
+                            result["products"][pid] = {
+                                "viewers": item.get("unique_shoppers", 0),
+                                "total_focus_duration_sec": item.get("total_attention_sec", 0.0),
+                                "average_focus_duration_sec": item.get("average_attention_sec", 0.0),
+                                "attention_events": item.get("attention_event_count", 0),
+                            }
+            except Exception as exc:
+                self.logger.warning(f"Could not load target attention summary: {exc}")
 
         return result
 
@@ -472,9 +555,13 @@ class Module8ScoringEngine:
         """Load Module 5 product interaction outputs."""
         result: Dict[str, Any] = {"products": {}, "summary": {}}
 
-        m5_file = output_dir / "module5" / "module5_analysis.json"
+        # Task 1.1: Use the correct file name produced by the interaction service
+        m5_file = output_dir / "module5" / "module5_interaction_report.json"
         if not m5_file.exists():
-            # Fallback: check disk-cached analysis
+            # Fallback: legacy file name for backward compatibility
+            m5_file = output_dir / "module5" / "module5_analysis.json"
+        if not m5_file.exists():
+            # Fallback: check disk-cached analysis at root level
             m5_file = output_dir / "module5_analysis.json"
 
         if m5_file.exists():

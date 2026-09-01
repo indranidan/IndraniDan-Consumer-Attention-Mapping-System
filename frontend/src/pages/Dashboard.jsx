@@ -1,46 +1,112 @@
 /**
- * Operational Stats Dashboard
- * ===========================
- * Clean, lightweight operational dashboard showing real-time statistics
- * for Stores, Zones, Shelves, Products, and Cameras.
+ * Retail Intelligence Executive Command Center
+ * ==============================================
+ * Comprehensive executive single-pane-of-glass dashboard consolidating:
+ * - Module 3: Shopper Footfall & Trajectories
+ * - Module 4: Gaze Attention & Dwell
+ * - Module 5: Physical Interaction Yield & Return Rate
+ * - Module 6: 4-Stage Conversion Funnel & Behavior Archetypes
+ * - Module 7: Spatial Traffic Flow & Heatmaps
+ * - Module 8: 5-Pillar Bayesian Product Attractiveness Scoring
+ * - Module 9: Prescriptive Merchandising Actions & What-If Simulation
  */
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getDashboardStats, getDashboardAnalytics, getSyncCachedData } from "../services/storeService";
+import {
+  getDashboardStats,
+  getDashboardAnalytics,
+  getStores,
+  getSyncCachedData,
+} from "../services/storeService";
+
+import ExecutivePulseCards from "../components/dashboard/ExecutivePulseCards";
+import ConversionFunnelWidget from "../components/dashboard/ConversionFunnelWidget";
+import AttractivenessLeaderboardWidget from "../components/dashboard/AttractivenessLeaderboardWidget";
+import ShopperArchetypesWidget from "../components/dashboard/ShopperArchetypesWidget";
+import PrescriptiveActionFeed from "../components/dashboard/PrescriptiveActionFeed";
+import PlanogramSwapSimulator from "../components/recommendations/PlanogramSwapSimulator";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [storesList, setStoresList] = useState([]);
+
   const cachedStats = getSyncCachedData("dashboard", "stats")?.data;
-  const cachedAnalytics = getSyncCachedData("dashboard", "analytics")?.data;
+  const cachedAnalytics = getSyncCachedData("dashboard", "analytics_global")?.data;
 
   const [stats, setStats] = useState(cachedStats || null);
   const [analytics, setAnalytics] = useState(cachedAnalytics || null);
   const [loading, setLoading] = useState(!cachedStats && !cachedAnalytics);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Simulator Modal State
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const [selectedProductForSim, setSelectedProductForSim] = useState(null);
 
   const userRole =
     typeof user?.role === "object" ? user.role.role_name : user?.role || "Administrator";
 
-  useEffect(() => {
-    Promise.allSettled([getDashboardStats(), getDashboardAnalytics()])
-      .then(([statsRes, analyticsRes]) => {
+  const loadData = (storeId = selectedStoreId, force = false) => {
+    if (force) setRefreshing(true);
+    else if (!stats && !analytics) setLoading(true);
+
+    Promise.allSettled([
+      getDashboardStats(force),
+      getDashboardAnalytics(storeId || null, force),
+      getStores(),
+    ])
+      .then(([statsRes, analyticsRes, storesRes]) => {
         if (statsRes.status === "fulfilled" && statsRes.value?.data) {
           const statsData = statsRes.value.data.data || statsRes.value.data;
           setStats(statsData);
-        } else if (!stats) {
-          setStats({ stores: 0, zones: 0, shelves: 0, products: 0, cameras: 0 });
         }
         if (analyticsRes.status === "fulfilled" && analyticsRes.value?.data) {
           const analyticsData = analyticsRes.value.data.data || analyticsRes.value.data;
           setAnalytics(analyticsData);
         }
+        if (storesRes.status === "fulfilled" && storesRes.value?.data) {
+          const storesData = Array.isArray(storesRes.value.data)
+            ? storesRes.value.data
+            : storesRes.value.data?.data || [];
+          setStoresList(storesData);
+        }
       })
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
+  };
 
+  useEffect(() => {
+    loadData(selectedStoreId);
+  }, [selectedStoreId]);
+
+  const handleStoreChange = (e) => {
+    setSelectedStoreId(e.target.value);
+  };
+
+  const handleOpenSimulator = (rec = null) => {
+    if (rec?.target_id) {
+      setSelectedProductForSim({
+        product_id: rec.target_id,
+        product_name: rec.target_name,
+        category: "General",
+        intrinsic_attractiveness_score: rec.current_metrics?.intrinsic_attractiveness || 70.0,
+        attractiveness_score: rec.current_metrics?.observed_attractiveness || 50.0,
+        shelf_visibility: {
+          shelf_tier: rec.shelf_swap_details?.from_tier || "BOTTOM",
+          gamma_coefficient: rec.shelf_swap_details?.from_gamma || 0.40,
+        },
+      });
+    } else {
+      setSelectedProductForSim(null);
+    }
+    setSimulatorOpen(true);
+  };
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -70,223 +136,230 @@ export default function Dashboard() {
 
   const currentRole = roleConfigs[userRole] || roleConfigs.Administrator;
 
-  const statCards = [
-    {
-      label: "Stores",
-      value: stats?.stores ?? 0,
-      path: "/stores",
-      gradient: "from-violet-500 to-indigo-600",
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-        </svg>
-      ),
-    },
-    {
-      label: "Zones",
-      value: stats?.zones ?? 0,
-      path: "/zones",
-      gradient: "from-emerald-500 to-teal-600",
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-        </svg>
-      ),
-    },
-    {
-      label: "Shelves",
-      value: stats?.shelves ?? 0,
-      path: "/shelves",
-      gradient: "from-amber-500 to-orange-600",
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-        </svg>
-      ),
-    },
-    {
-      label: "Products",
-      value: stats?.products ?? 0,
-      path: "/products",
-      gradient: "from-pink-500 to-rose-600",
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-        </svg>
-      ),
-    },
-    {
-      label: "Cameras",
-      value: stats?.cameras ?? 0,
-      path: "/cameras",
-      gradient: "from-cyan-500 to-blue-600",
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-        </svg>
-      ),
-    },
+  const entityCounters = [
+    { label: "Stores", count: stats?.stores ?? 0, path: "/stores", color: "text-violet-400" },
+    { label: "Zones", count: stats?.zones ?? 0, path: "/zones", color: "text-emerald-400" },
+    { label: "Shelves", count: stats?.shelves ?? 0, path: "/shelves", color: "text-amber-400" },
+    { label: "Products", count: stats?.products ?? 0, path: "/products", color: "text-pink-400" },
+    { label: "Cameras", count: stats?.cameras ?? 0, path: "/cameras", color: "text-cyan-400" },
   ];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-12">
-      {/* ── Top Header & Role Badge ───────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-16">
+      {/* ── Top Header & Fleet Filter Bar ────────────────────────────── */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-5 shadow-xl">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            {getGreeting()}, {user?.full_name?.split(" ")[0] || "User"} 👋
-          </h1>
-          <p className="text-sm text-gray-400 mt-1">
-            Consumer Attention Mapping & Retail Operations Overview
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              {getGreeting()}, {user?.full_name?.split(" ")[0] || "Executive"} 👋
+            </h1>
+            <span className={`hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold border ${currentRole.badge}`}>
+              {userRole}
+            </span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            Retail Intelligence Command Center • Multi-Camera Computer Vision & Attention Scoring
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${currentRole.gradient} flex items-center justify-center text-white shadow-lg`}>
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        {/* Action Controls & Store Selector */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Store Selector */}
+          <div className="relative">
+            <select
+              value={selectedStoreId}
+              onChange={handleStoreChange}
+              className="appearance-none bg-gray-800/90 hover:bg-gray-800 border border-gray-700/80 text-white text-xs rounded-xl pl-3.5 pr-8 py-2 font-medium focus:outline-none focus:border-violet-500 transition-colors shadow-inner"
+            >
+              <option value="">🏬 All Store Fleet (Global)</option>
+              {storesList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  🏬 {s.name}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-400">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Quick Refresh */}
+          <button
+            onClick={() => loadData(selectedStoreId, true)}
+            disabled={refreshing}
+            className="p-2 bg-gray-800/90 hover:bg-gray-700/80 border border-gray-700/80 rounded-xl text-gray-300 hover:text-white transition-colors"
+            title="Refresh Intelligence Data"
+          >
+            <svg
+              className={`w-4 h-4 ${refreshing ? "animate-spin text-violet-400" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-          </div>
-          <div>
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold border ${currentRole.badge}`}>
-              {userRole}
-            </span>
-            <p className="text-[11px] text-gray-500 mt-0.5">Active Session</p>
-          </div>
+          </button>
+
+          {/* What-If Simulator Quick Button */}
+          <button
+            onClick={() => handleOpenSimulator()}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-violet-600/20 transition-all hover:scale-[1.02]"
+          >
+            <span>🔮</span>
+            <span>What-If Studio</span>
+          </button>
         </div>
       </div>
 
-      {/* ── Primary Operational Stat Cards ────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-5">
-        {statCards.map((card) => (
+      {/* ── Entity Quick Counters Strip ──────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {entityCounters.map((ec) => (
           <button
-            key={card.label}
-            onClick={() => navigate(card.path)}
-            className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-5 sm:p-6 hover:border-gray-700/80 hover:bg-gray-900/80 transition-all duration-300 group text-left shadow-lg shadow-black/20 relative overflow-hidden"
+            key={ec.label}
+            onClick={() => navigate(ec.path)}
+            className="bg-gray-900/40 hover:bg-gray-800/60 border border-gray-800/80 rounded-xl p-3 flex items-center justify-between text-left transition-colors group"
           >
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
-                {card.label}
-              </span>
-              <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${card.gradient} flex items-center justify-center text-white shadow-lg opacity-85 group-hover:opacity-100 group-hover:scale-105 transition-all`}>
-                {card.icon}
-              </div>
+            <div>
+              <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">
+                {ec.label}
+              </p>
+              <p className="text-xl font-extrabold text-white font-mono mt-0.5">
+                {ec.count}
+              </p>
             </div>
-            {loading ? (
-              <div className="h-9 w-16 bg-gray-800/50 rounded-lg animate-pulse" />
-            ) : (
-              <div className="flex items-baseline justify-between mt-2">
-                <p className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                  {card.value}
-                </p>
-                <span className="text-xs text-gray-500 group-hover:text-violet-400 font-medium transition-colors">
-                  View →
-                </span>
-              </div>
-            )}
+            <span className={`text-xs font-semibold ${ec.color} opacity-80 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all`}>
+              →
+            </span>
           </button>
         ))}
       </div>
 
-      {/* ── Module 6: Consumer Behavior Intelligence Summary ────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Dominant Shopper Archetype Highlight */}
-        <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-violet-400 uppercase tracking-wider flex items-center gap-2">
-                <span>🧠</span> Dominant Shopper Archetype
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20 font-mono">
-                Module 6
-              </span>
-            </div>
-            <p className="text-2xl font-bold text-white tracking-tight mt-1">
-              {analytics?.overview?.dominant_segment ? (
-                analytics.overview.dominant_segment.replace("_", " ")
-              ) : (
-                "Explorer Shoppers"
-              )}
-            </p>
-            <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-              {analytics?.overview?.dominant_segment === "QUICK_BUYER"
-                ? "Fast-moving target seekers with high path efficiency and minimal dwell time. Ensure key products remain accessible near main aisle."
-                : analytics?.overview?.dominant_segment === "COMPARISON_SHOPPER"
-                ? "Deep evaluators with high gaze alternation rates. Optimize side-by-side shelf comparisons and price tag visibility."
-                : analytics?.overview?.dominant_segment === "BRAND_LOYAL"
-                ? "Highly concentrated brand focus. Strengthen brand block displays and dedicated end-caps."
-                : "Broad store path exploration with high dwell-to-transit ratio. Maximize promotional impulse triggers across exploration routes."}
-            </p>
-          </div>
+      {/* ── Executive Pulse 5 KPI Cards ──────────────────────────────── */}
+      <ExecutivePulseCards kpis={analytics?.kpis} loading={loading} />
 
-          <div className="mt-5 pt-4 border-t border-gray-800/60 flex items-center justify-between text-xs">
-            <span className="text-gray-500">AI Job Analyzed Sessions:</span>
-            <span className="font-mono text-cyan-400 font-bold">
-              {analytics?.overview?.total_shoppers || stats?.stores || 0} Classified
-            </span>
-          </div>
-        </div>
-
-        {/* Segment Distribution Breakdown */}
-        <div className="lg:col-span-2 bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-6 shadow-xl">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <span>🎭</span> Cross-Store Shopper Segmentation Breakdown
-              </h3>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Aggregated behavior archetypes across completed video analysis pipelines
-              </p>
-            </div>
-            <button
-              onClick={() => navigate("/ai-jobs")}
-              className="text-xs text-violet-400 hover:text-violet-300 transition-colors font-medium"
-            >
-              View Jobs →
-            </button>
-          </div>
-
-          {analytics?.overview?.segment_distribution &&
-          Object.keys(analytics.overview.segment_distribution).length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {Object.entries(analytics.overview.segment_distribution).map(([seg, count]) => {
-                const total = Object.values(analytics.overview.segment_distribution).reduce((a, b) => a + b, 0);
-                const pct = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
-                return (
-                  <div key={seg} className="bg-gray-950/60 border border-gray-800/60 rounded-xl p-3.5">
-                    <div className="flex justify-between text-xs mb-1.5">
-                      <span className="font-semibold text-white capitalize">{seg.toLowerCase().replace("_", " ")}</span>
-                      <span className="font-mono text-violet-400 font-bold">{count} ({pct}%)</span>
-                    </div>
-                    <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 py-2">
-              {[
-                { name: "Explorer", icon: "🧭", pct: "35%", color: "from-blue-600 to-cyan-500" },
-                { name: "Quick Buyer", icon: "⚡", pct: "25%", color: "from-amber-500 to-orange-600" },
-                { name: "Comparison", icon: "⚖️", pct: "20%", color: "from-purple-600 to-indigo-600" },
-                { name: "Impulse", icon: "🎯", pct: "12%", color: "from-rose-500 to-pink-600" },
-                { name: "Brand Loyal", icon: "🏷️", pct: "8%", color: "from-emerald-500 to-teal-600" },
-              ].map((archetype) => (
-                <div key={archetype.name} className="bg-gray-950/60 border border-gray-800/60 rounded-xl p-3 text-center">
-                  <span className="text-xl mb-1 block">{archetype.icon}</span>
-                  <p className="text-xs font-semibold text-white">{archetype.name}</p>
-                  <p className="text-xs font-mono text-gray-400 mt-0.5">{archetype.pct}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      {/* ── Primary Intelligence Grid: Funnel & Recommendations ───────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ConversionFunnelWidget
+          funnel={analytics?.funnel}
+          loading={loading}
+          onNavigateJobs={() => navigate("/ai-jobs")}
+        />
+        <PrescriptiveActionFeed
+          recommendations={analytics?.recommendations}
+          loading={loading}
+          onOpenSimulator={handleOpenSimulator}
+          onNavigateRecommendations={() => navigate("/recommendations")}
+        />
       </div>
+
+      {/* ── Secondary Intelligence Grid: Attractiveness & Archetypes ──── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <AttractivenessLeaderboardWidget
+          leaderboard={analytics?.leaderboard}
+          loading={loading}
+          onNavigateScoring={() => navigate("/analytics")}
+        />
+        <ShopperArchetypesWidget
+          archetypes={analytics?.archetypes}
+          loading={loading}
+          onNavigateBehavior={() => navigate("/analytics")}
+        />
+      </div>
+
+      {/* ── Recent AI Processing Pipelines Table ─────────────────────── */}
+      <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <span>📹</span> Live Video Analytics Jobs Pipeline
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Recent vision pipelines tracking multi-camera shopper attention
+            </p>
+          </div>
+          <button
+            onClick={() => navigate("/ai-jobs")}
+            className="text-xs text-violet-400 hover:text-violet-300 font-medium transition-colors"
+          >
+            Manage Jobs →
+          </button>
+        </div>
+
+        {analytics?.recent_jobs && analytics.recent_jobs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-gray-800 text-gray-400">
+                  <th className="pb-3 font-semibold">Camera Source</th>
+                  <th className="pb-3 font-semibold">Store</th>
+                  <th className="pb-3 font-semibold">Status</th>
+                  <th className="pb-3 font-semibold">Execution Time</th>
+                  <th className="pb-3 font-semibold text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/60">
+                {analytics.recent_jobs.map((job) => (
+                  <tr key={job.id} className="hover:bg-gray-800/30 transition-colors">
+                    <td className="py-3 font-semibold text-white">
+                      {job.camera_name || "Camera"}
+                    </td>
+                    <td className="py-3 text-gray-400">{job.store_name}</td>
+                    <td className="py-3">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          job.status === "COMPLETED"
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : job.status === "PROCESSING"
+                            ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse"
+                            : job.status === "FAILED"
+                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                            : "bg-gray-500/10 text-gray-400"
+                        }`}
+                      >
+                        {job.status}
+                      </span>
+                    </td>
+                    <td className="py-3 font-mono text-gray-400">
+                      {job.duration ? `${job.duration}s` : "—"}
+                    </td>
+                    <td className="py-3 text-right">
+                      <button
+                        onClick={() => navigate("/ai-jobs")}
+                        className="text-violet-400 hover:text-violet-300 font-semibold"
+                      >
+                        Inspect →
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-6 text-center text-gray-500 text-xs">
+            No recent video jobs found. Launch an AI Job to stream attention telemetry.
+          </div>
+        )}
+      </div>
+
+      {/* ── Modal: What-If Planogram Simulator ──────────────────────── */}
+      {simulatorOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-gray-900 border border-gray-800 rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
+            <button
+              onClick={() => setSimulatorOpen(false)}
+              className="absolute top-5 right-5 p-2 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <PlanogramSwapSimulator initialProduct={selectedProductForSim} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@
  */
 
 import api from "./api";
+import { runScoringAnalysis, invalidateScoringCache } from "./scoringService";
 
 // ── Global Client-Side SWR Cache Manager (with sessionStorage) ──
 const _clientEntityCache = new Map();
@@ -383,15 +384,20 @@ export const createJobWebSocket = (jobId, onMessage, onError, onClose) => {
 
 // ── Unified AI Job Orchestration ─────────────────────────────
 export const reEvaluateAIJob = async (jobId) => {
-  const [attentionRes, interactionRes, behaviorRes] = await Promise.all([
+  const [attentionRes, interactionRes, behaviorRes, scoringRes] = await Promise.all([
     runAttentionJob(jobId),
     runInteractionJob(jobId),
     runBehaviorJob(jobId),
+    runScoringAnalysis(jobId).catch((err) => {
+      console.warn("Module 8 scoring rerun skipped/failed:", err);
+      return { data: null };
+    }),
   ]);
   return {
     attention: attentionRes.data,
     interaction: interactionRes.data,
     behavior: behaviorRes.data,
+    scoring: scoringRes?.data || scoringRes,
   };
 };
 
@@ -404,9 +410,12 @@ export const invalidateUnifiedDataCache = (jobId = null) => {
   if (jobId) {
     _unifiedDataCache.delete(jobId);
     _behaviorCache.delete(jobId);
+    invalidateScoringCache(`scores:${jobId}`);
+    invalidateScoringCache(`leaderboard:${jobId}`);
   } else {
     _unifiedDataCache.clear();
     _behaviorCache.clear();
+    invalidateScoringCache();
   }
 };
 
@@ -449,9 +458,10 @@ export const getUnifiedAIJobData = async (jobId, forceFresh = false) => {
   return data;
 };
 
-// ── Dashboard Aggregations & Camera Health ──────────────────
-export const getDashboardAnalytics = (forceFresh = false) =>
-  cachedGet("dashboard", "analytics", () => api.get("/api/dashboard/analytics"), 20000, forceFresh);
+export const getDashboardAnalytics = (storeId = null, forceFresh = false) => {
+  const url = storeId ? `/api/dashboard/analytics?store_id=${storeId}` : `/api/dashboard/analytics`;
+  return cachedGet("dashboard", `analytics_${storeId || "global"}`, () => api.get(url), 20000, forceFresh);
+};
 export const testCameraStream = (cameraId) => api.post(`/api/cameras/${cameraId}/test`);
 export const getCameraSnapshot = (cameraId) => api.get(`/api/cameras/${cameraId}/snapshot`);
 

@@ -24,6 +24,7 @@ import Shelves from "./pages/Shelves";
 import Products from "./pages/Products";
 import Cameras from "./pages/Cameras";
 import AIAnalytics from "./pages/AIAnalytics";
+import Recommendations from "./pages/Recommendations";
 
 export default function App() {
   return (
@@ -49,6 +50,7 @@ export default function App() {
                   <Route path="/products" element={<Products />} />
                   <Route path="/cameras" element={<Cameras />} />
                   <Route path="/analytics" element={<AIAnalytics />} />
+                  <Route path="/recommendations" element={<Recommendations />} />
                 </Route>
               </Route>
 

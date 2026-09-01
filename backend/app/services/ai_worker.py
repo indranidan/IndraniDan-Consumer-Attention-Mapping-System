@@ -396,70 +396,12 @@ def run_pipeline(
             except Exception as mongo_exc:
                 _logger.warning(f"MongoDB post-processing ingestion skipped: {mongo_exc}")
 
-            # 2. Pre-warm & persist Module 4 Attention Analysis & 2D Heatmap
+            # 2. Publish JOB_PROCESSED event to trigger asynchronous Module 4, 5, 6, and 8 processing
             try:
-                from app.services.attention_service import get_or_run_module4_analysis
-                m4_db: Session = SessionLocal()
-                try:
-                    get_or_run_module4_analysis(m4_db, job_id, force_rerun=True)
-                    _logger.info(f"Module 4 Attention Analysis pre-warmed and persisted for job {job_id}")
-                finally:
-                    m4_db.close()
-            except Exception as m4_exc:
-                _logger.warning(f"Could not auto-generate Module 4 analysis for job {job_id}: {m4_exc}")
-
-            # 3. Pre-warm & persist Module 5 Product Interaction Analysis
-            try:
-                from app.services.interaction_service import get_or_run_module5_analysis
-                m5_db: Session = SessionLocal()
-                try:
-                    get_or_run_module5_analysis(m5_db, job_id, force_rerun=True)
-                    _logger.info(f"Module 5 Product Interaction Analysis pre-warmed and persisted for job {job_id}")
-                finally:
-                    m5_db.close()
-            except Exception as m5_exc:
-                _logger.warning(f"Could not auto-generate Module 5 analysis for job {job_id}: {m5_exc}")
-
-            # 4. Pre-warm & persist Module 6 Consumer Behavior Analysis
-            try:
-                from app.services.behavior_service import run_module6_analysis
-                m6_db: Session = SessionLocal()
-                try:
-                    run_module6_analysis(job_id=job_id, db=m6_db, force_recompute=True)
-                    _logger.info(f"Module 6 Consumer Behavior Analysis pre-warmed and persisted for job {job_id}")
-                finally:
-                    m6_db.close()
-            except Exception as m6_exc:
-                _logger.warning(f"Could not auto-generate Module 6 analysis for job {job_id}: {m6_exc}")
-
-            # 5. Pre-warm & persist Module 8 Product Attractiveness Scoring
-            try:
-                from app.services.scoring_service import get_or_run_module8_analysis
-                m8_db: Session = SessionLocal()
-                try:
-                    get_or_run_module8_analysis(m8_db, job_id, force_rerun=True)
-                    _logger.info(f"Module 8 Product Attractiveness Scoring pre-warmed and persisted for job {job_id}")
-                finally:
-                    m8_db.close()
-            except Exception as m8_exc:
-                _logger.warning(f"Could not auto-generate Module 8 scoring for job {job_id}: {m8_exc}")
-
-            # Enrich job summary with Module 8 product attractiveness metrics
-            try:
-                from app.services.scoring_service import _get_m8_analysis
-                m8_data = _get_m8_analysis(str(job_id))
-                if m8_data and m8_data.get("summary"):
-                    m8_sum = m8_data["summary"]
-                    summary["product_attractiveness"] = {
-                        "total_products_scored": m8_sum.get("total_products_scored", 0),
-                        "average_attractiveness_score": m8_sum.get("average_attractiveness_score", 0.0),
-                        "top_performer_name": m8_sum.get("top_performer_name"),
-                        "top_performer_score": m8_sum.get("top_performer_score", 0.0),
-                        "bottom_performer_name": m8_sum.get("bottom_performer_name"),
-                        "bottom_performer_score": m8_sum.get("bottom_performer_score", 0.0),
-                    }
-            except Exception as m8_sum_exc:
-                _logger.warning(f"Could not enrich summary with Module 8 metrics: {m8_sum_exc}")
+                from app.core.redis_listener import dispatch_job_event
+                dispatch_job_event("JOB_PROCESSED", job_id_str)
+            except Exception as pub_exc:
+                _logger.warning(f"Could not dispatch JOB_PROCESSED event for job {job_id}: {pub_exc}")
 
             # 6. Mark job COMPLETED and broadcast state to UI
             _update_job_status(

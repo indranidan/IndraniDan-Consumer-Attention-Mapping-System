@@ -39,6 +39,7 @@ from app.api.interactions import router as interactions_router
 from app.api.behavior import router as behavior_router
 from app.api.heatmaps import router as heatmaps_router
 from app.api.scoring import router as scoring_router
+from app.api.recommendations import router as recommendations_router
 
 from app.database.database import SessionLocal
 from app.database.mongodb import connect_mongo, close_mongo, get_mongo_client
@@ -97,12 +98,25 @@ async def lifespan(app: FastAPI):
 
     import asyncio
     from app.core.job_stream import job_stream_manager
-    job_stream_manager.set_event_loop(asyncio.get_running_loop())
+    loop = asyncio.get_running_loop()
+    job_stream_manager.set_event_loop(loop)
+
+    from app.core.redis_listener import set_event_loop as set_bus_loop, start_redis_listener, stop_redis_listener
+    from app.core.redis_client import is_redis_available
+    set_bus_loop(loop)
+
+    if is_redis_available():
+        print("[INFO] Redis: Connected ✅ (Event bus: Redis Pub/Sub)")
+    else:
+        print("[INFO] Redis: Not available ⚠️ (Event bus: In-process fallback)")
+
+    start_redis_listener()
 
     yield
 
     # Shutdown
     print("[INFO] Backend shutting down...")
+    stop_redis_listener()
     await close_mongo()
 
 
@@ -117,11 +131,12 @@ app = FastAPI(
         "Module 5: Product Interaction Analysis Module (Viewed, Pickup, Return, Comparison, Shelf Interaction). "
         "Module 6: Consumer Behavior Intelligence Engine (Shopper Segmentation, Journeys, Transitions). "
         "Module 8: Product Attractiveness Scoring Engine (5-Pillar Scoring, Bayesian Smoothing, Shelf Visibility). "
+        "Module 9: Recommendation & Optimization Engine (Shelf Optimization, Swaps, Promotions, Friction Interventions, What-If Simulator). "
         "Provides user registration, login, JWT auth, Google OAuth, "
         "role-based permissions, full retail store management, "
         "and advanced shopper behavior & product interaction analytics."
     ),
-    version="8.0.0",
+    version="9.0.0",
     lifespan=lifespan,
 )
 
@@ -175,6 +190,9 @@ app.include_router(heatmaps_router)
 # Module 8: Product Attractiveness Scoring Engine
 app.include_router(scoring_router)
 
+# Module 9: Recommendation & Optimization Engine
+app.include_router(recommendations_router)
+
 
 # ── Health Check ──────────────────────────────────────────────
 @app.get(
@@ -196,6 +214,12 @@ def health_check():
     mongo_client = get_mongo_client()
     mongo_status = "connected" if mongo_client is not None else "fallback_mode"
 
+    # Check Redis
+    from app.core.redis_client import is_redis_available
+    redis_connected = is_redis_available()
+    redis_status = "connected" if redis_connected else "disconnected"
+    event_bus_mode = "redis_pubsub" if redis_connected else "in_process_fallback"
+
     google_configured = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
     overall_status = "healthy" if pg_status == "healthy" else "degraded"
 
@@ -205,6 +229,11 @@ def health_check():
         "databases": {
             "postgresql": pg_status,
             "mongodb": mongo_status,
+            "redis": redis_status,
+        },
+        "event_bus": {
+            "mode": event_bus_mode,
+            "redis_connected": redis_connected,
         },
         "auth_providers": {
             "password": True,
@@ -219,8 +248,9 @@ def health_check():
             "Consumer Behavior Intelligence Engine",
             "Attention Heatmap Engine",
             "Product Attractiveness Scoring Engine",
+            "Recommendation & Optimization Engine",
         ],
-        "version": "8.0.0",
+        "version": "9.0.0",
     }
 
 

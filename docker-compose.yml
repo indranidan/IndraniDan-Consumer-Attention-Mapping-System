@@ -37,6 +37,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Redis: Event Broker & In-Memory Cache ───────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: cams_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   # ── Backend: FastAPI & AI Worker Services ──────────────────────────
   backend:
     build:
@@ -48,6 +63,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/consumer_attention_db
       MONGODB_URL: mongodb://mongodb:27017
       MONGODB_DB_NAME: consumer_attention_ai_db
+      REDIS_URL: redis://redis:6379/0
       SECRET_KEY: change-this-in-production
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 60
@@ -63,6 +79,8 @@ services:
       postgres:
         condition: service_healthy
       mongodb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   # ── Frontend: React 18 + Vite Web Application ──────────────────────
@@ -81,4 +99,6 @@ volumes:
   postgres_data:
     driver: local
   mongo_data:
+    driver: local
+  redis_data:
     driver: local
