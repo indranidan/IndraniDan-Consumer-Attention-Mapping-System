@@ -47,28 +47,28 @@ export default function ReportsTab() {
     const lines = [
       `# Executive AI Consumer Intelligence & Attention Report`,
       `**Job ID:** \`${jobId}\` | **Camera:** ${job?.camera_name || "Camera"} | **Store:** ${job?.store_name || "Retail Store"}`,
-      `**Analyzed:** ${m4Summary.analyzed_at || new Date().toISOString()} | **Pipeline:** Full Analytical Suite (Modules 1 - 6)`,
+      `**Analyzed:** ${m4Summary.analyzed_at || new Date().toISOString()} | **Pipeline:** Integrated AI Attention Analytics Suite`,
       ``,
       `---`,
       ``,
-      `## 1. Executive Overview & Cross-Module KPI Scorecard`,
+      `## 1. Executive Overview & Integrated KPI Scorecard`,
       ``,
       `| Metric Dimension | Value | Pipeline Source |`,
       `| :--- | :--- | :--- |`,
-      `| **Total Unique Shoppers** | ${totalVisitors} | Module 3 (Tracking) |`,
-      `| **Total Store Visits & Dwells** | ${zoneDwellers} | Module 3 (Spatial Dwell) |`,
-      `| **Visual Attention Fixations** | ${shelfViewers} | Module 4 (Gaze Attention) |`,
-      `| **Average Shelf Attention Duration** | ${(m4Summary.average_attention_duration_sec || 0).toFixed(1)}s | Module 4 (Gaze Attention) |`,
-      `| **Product Views Detected** | ${productViewers} | Module 5 (Product Interactions) |`,
-      `| **Product Pickups / Returns** | ${m5Summary.total_pickups || 0} / ${m5Summary.total_returns || 0} | Module 5 (Product Interactions) |`,
-      `| **Multi-Product Comparisons** | ${m5Summary.total_comparisons || 0} | Module 5 (Product Interactions) |`,
-      `| **Dominant Shopper Archetype** | ${m6Summary.dominant_segment || "Explorer / Browser"} | Module 6 (Behavior Intelligence) |`,
-      `| **Average Path Efficiency** | ${((m6Summary.average_path_efficiency || 0.65) * 100).toFixed(1)}% | Module 6 (Behavior Intelligence) |`,
-      `| **Average Journey Duration** | ${(m6Summary.average_journey_duration_sec || 0).toFixed(1)}s | Module 6 (Behavior Intelligence) |`,
+      `| **Total Unique Shoppers** | ${totalVisitors} | Spatial Shopper Tracking |`,
+      `| **Total Store Visits & Dwells** | ${zoneDwellers} | Spatial Dwell Analysis |`,
+      `| **Visual Attention Fixations** | ${shelfViewers} | Gaze & Attention Engine |`,
+      `| **Average Shelf Attention Duration** | ${(m4Summary.average_attention_duration_sec || 0).toFixed(1)}s | Gaze & Attention Engine |`,
+      `| **Product Views Detected** | ${productViewers} | Product Interaction Engine |`,
+      `| **Product Pickups / Returns** | ${m5Summary.total_pickups || 0} / ${m5Summary.total_returns || 0} | Product Interaction Engine |`,
+      `| **Multi-Product Comparisons** | ${m5Summary.total_comparisons || 0} | Product Interaction Engine |`,
+      `| **Dominant Shopper Archetype** | ${m6Summary.dominant_segment || "Explorer / Browser"} | Behavioral Intelligence Engine |`,
+      `| **Average Path Efficiency** | ${((m6Summary.average_path_efficiency || 0.65) * 100).toFixed(1)}% | Behavioral Intelligence Engine |`,
+      `| **Average Journey Duration** | ${(m6Summary.average_journey_duration_sec || 0).toFixed(1)}s | Behavioral Intelligence Engine |`,
       ``,
       `---`,
       ``,
-      `## 2. Visual Shelf Attention & Engagement Matrix (Module 4)`,
+      `## 2. Visual Shelf Attention & Engagement Matrix`,
       ``,
       `| Shelf Name / Code | Visitors | Gaze Viewers | Total Attention Duration | Engagement Score |`,
       `| :--- | :--- | :--- | :--- | :--- |`,
@@ -89,7 +89,7 @@ export default function ReportsTab() {
       ``,
       `---`,
       ``,
-      `## 3. Product Consideration & Physical Interaction Matrix (Module 5)`,
+      `## 3. Product Consideration & Physical Interaction Matrix`,
       ``,
       `| Product Name | SKU | Views | Unique Viewers | Total Duration | Pickups | Comparisons |`,
       `| :--- | :--- | :--- | :--- | :--- | :--- | :--- |`
@@ -109,7 +109,7 @@ export default function ReportsTab() {
       ``,
       `---`,
       ``,
-      `## 4. Consumer Behavior & Shopper Archetypes (Module 6)`,
+      `## 4. Consumer Behavior & Shopper Archetypes`,
       ``,
       `*Classification of consumer navigation, dwell-to-transit ratio, and decision hesitation profiles.*`,
       ``,
@@ -123,7 +123,7 @@ export default function ReportsTab() {
       ``,
       `---`,
       ``,
-      `## 5. Zone Transition Dynamics & Markov Probabilities (Module 6)`,
+      `## 5. Zone Transition Dynamics & Markov Probabilities`,
       ``
     );
 
@@ -144,7 +144,7 @@ export default function ReportsTab() {
       ``,
       `---`,
       ``,
-      `## 6. Shopper Conversion Funnel & Friction Diagnostics (Module 6)`,
+      `## 6. Shopper Conversion Funnel & Friction Diagnostics`,
       ``,
       `| Funnel Stage | Shopper Count | Conversion Rate (%) | Drop-off Rate (%) |`,
       `| :--- | :--- | :--- | :--- |`,
@@ -174,7 +174,7 @@ export default function ReportsTab() {
       ``,
       `---`,
       ``,
-      `## 7. Product Preference Ranking & Dominant Demographics (Module 6)`,
+      `## 7. Product Preference Ranking & Dominant Demographics`,
       ``,
       `| Product Name | Composite Score (0-100) | Pickups | Returns | Interactors | Dominant Archetype |`,
       `| :--- | :--- | :--- | :--- | :--- | :--- |`
@@ -309,22 +309,22 @@ export default function ReportsTab() {
       makeRow(["Executive AI Consumer Attention Intelligence Report"], "TitleStyle"),
       makeRow([`Job ID: ${jobId}`, `Camera: ${job?.camera_name || "Camera"}`, `Store: ${job?.store_name || "Store"}`, `Date: ${new Date().toLocaleDateString()}`]),
       makeRow([]),
-      makeRow(["Metric Dimension", "Value", "Pipeline Module"], "HeaderStyle"),
-      makeRow(["Total Unique Shoppers", totalVisitors, "Module 3 (Tracking)"]),
-      makeRow(["Total Store Visits / Dwells", zoneDwellers, "Module 3 (Spatial Dwell)"]),
-      makeRow(["Shelf Gaze Attention Events", shelfViewers, "Module 4 (Gaze Attention)"]),
-      makeRow(["Average Shelf Attention Duration (s)", parseFloat((m4Summary.average_attention_duration_sec || 0).toFixed(2)), "Module 4 (Gaze Attention)"]),
-      makeRow(["Product Views Detected", productViewers, "Module 5 (Product Interactions)"]),
-      makeRow(["Total Product Pickups", m5Summary.total_pickups || 0, "Module 5 (Product Interactions)"]),
-      makeRow(["Total Product Returns", m5Summary.total_returns || 0, "Module 5 (Product Interactions)"]),
-      makeRow(["Multi-Product Comparisons", m5Summary.total_comparisons || 0, "Module 5 (Product Interactions)"]),
-      makeRow(["Dominant Shopper Archetype", m6Summary.dominant_segment || "Explorer / Browser", "Module 6 (Behavior Intelligence)"]),
-      makeRow(["Average Path Efficiency (%)", parseFloat(((m6Summary.average_path_efficiency || 0.65) * 100).toFixed(1)), "Module 6 (Behavior Intelligence)"]),
-      makeRow(["Average Journey Duration (s)", parseFloat((m6Summary.average_journey_duration_sec || 0).toFixed(1)), "Module 6 (Behavior Intelligence)"]),
+      makeRow(["Metric Dimension", "Value", "Analytics Engine"], "HeaderStyle"),
+      makeRow(["Total Unique Shoppers", totalVisitors, "Spatial Shopper Tracking"]),
+      makeRow(["Total Store Visits / Dwells", zoneDwellers, "Spatial Dwell Analysis"]),
+      makeRow(["Shelf Gaze Attention Events", shelfViewers, "Gaze & Attention Engine"]),
+      makeRow(["Average Shelf Attention Duration (s)", parseFloat((m4Summary.average_attention_duration_sec || 0).toFixed(2)), "Gaze & Attention Engine"]),
+      makeRow(["Product Views Detected", productViewers, "Product Interaction Engine"]),
+      makeRow(["Total Product Pickups", m5Summary.total_pickups || 0, "Product Interaction Engine"]),
+      makeRow(["Total Product Returns", m5Summary.total_returns || 0, "Product Interaction Engine"]),
+      makeRow(["Multi-Product Comparisons", m5Summary.total_comparisons || 0, "Product Interaction Engine"]),
+      makeRow(["Dominant Shopper Archetype", m6Summary.dominant_segment || "Explorer / Browser", "Behavioral Intelligence Engine"]),
+      makeRow(["Average Path Efficiency (%)", parseFloat(((m6Summary.average_path_efficiency || 0.65) * 100).toFixed(1)), "Behavioral Intelligence Engine"]),
+      makeRow(["Average Journey Duration (s)", parseFloat((m6Summary.average_journey_duration_sec || 0).toFixed(1)), "Behavioral Intelligence Engine"]),
     ];
 
     const archetypeRows = [
-      makeRow(["Shopper Behavioral Archetype Distribution (Module 6)"], "TitleStyle"),
+      makeRow(["Shopper Behavioral Archetype Distribution"], "TitleStyle"),
       makeRow([]),
       makeRow(["Shopper Archetype", "Description", "Share (%)", "Avg Confidence (%)"], "HeaderStyle"),
       makeRow(["Explorer / Browser", "High zone exploration, leisurely dwell, unhurried", m6Summary.segment_percentages?.["Explorer / Browser"] || 0, parseFloat(((m6Summary.avg_confidence_per_segment?.["Explorer / Browser"] || 0.85) * 100).toFixed(0))]),
@@ -335,7 +335,7 @@ export default function ReportsTab() {
     ];
 
     const shelfRows = [
-      makeRow(["Shelf Attention & Gaze Fixation Matrix (Module 4)"], "TitleStyle"),
+      makeRow(["Shelf Attention & Gaze Fixation Matrix"], "TitleStyle"),
       makeRow([]),
       makeRow(["Shelf Name", "Shelf Code", "Visitors", "Unique Gaze Viewers", "Total Attention Duration (s)", "Engagement Score (0-100)"], "HeaderStyle"),
       ...m4Shelves.map((s) =>
@@ -351,7 +351,7 @@ export default function ReportsTab() {
     ];
 
     const productRows = [
-      makeRow(["Product Interaction & Engagement Matrix (Module 5)"], "TitleStyle"),
+      makeRow(["Product Interaction & Engagement Matrix"], "TitleStyle"),
       makeRow([]),
       makeRow(["Product Name", "SKU", "Views", "Unique Viewers", "Total Duration (s)", "Pickups", "Returns", "Comparisons"], "HeaderStyle"),
       ...m5Products.map((p) =>
@@ -371,7 +371,7 @@ export default function ReportsTab() {
     const matrixZones = m6Transitions.zones || [];
     const matrixGrid = m6Transitions.matrix || [];
     const transitionRows = [
-      makeRow(["Zone-to-Zone Markov Transition Probabilities (Module 6)"], "TitleStyle"),
+      makeRow(["Zone-to-Zone Markov Transition Probabilities"], "TitleStyle"),
       makeRow([]),
       makeRow(["From Zone \\ To Zone", ...matrixZones], "HeaderStyle"),
       ...matrixZones.map((fromZone, rIdx) =>
@@ -380,7 +380,7 @@ export default function ReportsTab() {
     ];
 
     const funnelRows = [
-      makeRow(["Shopper Conversion Funnel & Friction Diagnostics (Module 6)"], "TitleStyle"),
+      makeRow(["Shopper Conversion Funnel & Friction Diagnostics"], "TitleStyle"),
       makeRow([]),
       makeRow(["Funnel Stage", "Shopper Count", "Conversion Rate (%)", "Drop-off Rate (%)"], "HeaderStyle"),
       makeRow(["1. Store Visitors / Passersby", totalVisitors, "100.0%", "0.0%"]),
@@ -397,7 +397,7 @@ export default function ReportsTab() {
     ];
 
     const prefRows = [
-      makeRow(["Product Preference Index & Target Demographic (Module 6)"], "TitleStyle"),
+      makeRow(["Product Preference Index & Target Demographic"], "TitleStyle"),
       makeRow([]),
       makeRow(["Product Name", "Preference Score (0-100)", "Total Pickups", "Total Returns", "Unique Interactors", "Dominant Archetype"], "HeaderStyle"),
       ...m6ProductPrefs.map((pp) =>
@@ -511,7 +511,7 @@ export default function ReportsTab() {
             </div>
           </div>
 
-          <h3>1. Shopper Behavioral Archetypes (Module 6)</h3>
+          <h3>1. Shopper Behavioral Archetypes</h3>
           <table>
             <thead>
               <tr>
@@ -530,7 +530,7 @@ export default function ReportsTab() {
             </tbody>
           </table>
 
-          <h3>2. Visual Shelf Attention & Engagement Matrix (Module 4)</h3>
+          <h3>2. Visual Shelf Attention & Engagement Matrix</h3>
           <table>
             <thead>
               <tr>
@@ -554,7 +554,7 @@ export default function ReportsTab() {
             </tbody>
           </table>
 
-          <h3>3. Product Consideration & Interaction Matrix (Module 5)</h3>
+          <h3>3. Product Consideration & Interaction Matrix</h3>
           <table>
             <thead>
               <tr>
@@ -580,7 +580,7 @@ export default function ReportsTab() {
             </tbody>
           </table>
 
-          <h3>4. Shopper Conversion Funnel & Friction Points (Module 6)</h3>
+          <h3>4. Shopper Conversion Funnel & Friction Points</h3>
           <table>
             <thead>
               <tr>
@@ -599,7 +599,7 @@ export default function ReportsTab() {
             </tbody>
           </table>
 
-          <h3>5. Top Product Preference Ranking (Module 6)</h3>
+          <h3>5. Top Product Preference Ranking</h3>
           <table>
             <thead>
               <tr>

@@ -256,7 +256,7 @@ export default function Module6BehaviorAnalytics({ jobId, job, initialData = nul
           onClick={handleRecompute}
           disabled={refreshing}
           className="px-3 py-1.5 rounded-xl text-xs font-medium bg-gray-800 hover:bg-gray-700 text-white transition-all flex items-center gap-1.5 border border-gray-700/50"
-          title="Recompute Module 6 Behavioral Engine"
+          title="Recompute Behavioral Analytics Engine"
         >
           <svg
             className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`}

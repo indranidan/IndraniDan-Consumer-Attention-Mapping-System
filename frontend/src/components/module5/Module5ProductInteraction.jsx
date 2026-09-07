@@ -179,10 +179,10 @@ export default function Module5ProductInteraction({ jobId, job }) {
       <div className="py-16 text-center">
         <div className="w-9 h-9 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
         <p className="text-sm text-gray-400 font-medium">
-          Loading Module 5 Product Interaction Analysis...
+          Loading Product Interaction Analysis...
         </p>
         <p className="text-xs text-gray-600 mt-1">
-          Ingesting Module 3 & Module 4 spatial and attention tracking data
+          Ingesting spatial tracking and gaze attention telemetry
         </p>
       </div>
     );
@@ -204,7 +204,7 @@ export default function Module5ProductInteraction({ jobId, job }) {
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
           />
         </svg>
-        <p className="text-sm font-semibold text-red-300 mb-1">Module 5 Analysis Error</p>
+        <p className="text-sm font-semibold text-red-300 mb-1">Product Interaction Analysis Notice</p>
         <button
           onClick={handleRefresh}
           disabled={refreshing}
@@ -378,7 +378,7 @@ export default function Module5ProductInteraction({ jobId, job }) {
                   </h4>
                 </div>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  Module 5 executes natively on Module 3 tracking trajectories, sessions, and Module 4 head-pose attention vectors without re-running heavy neural networks.
+                  Executes natively on spatial tracking trajectories, shopper sessions, and head-pose attention vectors without re-running heavy neural networks.
                 </p>
               </div>
               <div className="mt-3 pt-3 border-t border-gray-800/60 flex flex-wrap gap-2 text-[11px]">
@@ -856,7 +856,7 @@ export default function Module5ProductInteraction({ jobId, job }) {
                 Structured Markdown & JSON Report
               </h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                Export-ready summary document for Module 5
+                Export-ready summary document for Product Interaction Analytics
               </p>
             </div>
             <button

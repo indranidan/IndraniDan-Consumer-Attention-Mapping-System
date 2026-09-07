@@ -42,4 +42,9 @@ itsdangerous==2.2.0
 # Real-Time Event Bus
 # ========================
 redis>=5.0.0
-redis 
+
+# ========================
+# Reports & Exports (Module 12)
+# ========================
+reportlab>=4.0.0
+openpyxl>=3.1.0

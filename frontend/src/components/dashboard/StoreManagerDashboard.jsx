@@ -4,6 +4,7 @@
  * Shelf Performance Reports, Conversion Metrics.
  */
 import React from "react";
+import ActiveAlertsCard from "./ActiveAlertsCard";
 
 /* ─── Reusable KPI card ────────────────────────────────────── */
 function KpiCard({ icon, label, value, sub, color = "text-white" }) {
@@ -47,6 +48,9 @@ export default function StoreManagerDashboard({ analytics, stats, loading }) {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* ── Active Alerts (Module 11) ──────────────────────────── */}
+      <ActiveAlertsCard />
+
       {/* ── 1. Store Traffic Analytics ──────────────────────────── */}
       <section>
         <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">

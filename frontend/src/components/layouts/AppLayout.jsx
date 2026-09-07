@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import NotificationPopover from "../notifications/NotificationPopover";
 
 const navItems = [
   {
@@ -89,6 +90,16 @@ const navItems = [
     ),
   },
   {
+    label: "Reports",
+    path: "/reports",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+          d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
     label: "Profile",
     path: "/profile",
     icon: (
@@ -141,7 +152,7 @@ export default function AppLayout() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-white leading-tight">CAMS</h2>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Module 2: Store Management</p>
+            <p className="text-[10px] text-violet-400 font-medium tracking-wider">Retail Attention Platform v12.0.0</p>
           </div>
         </div>
 
@@ -208,8 +219,9 @@ export default function AppLayout() {
 
           <div className="hidden lg:block" />
 
-          {/* Right side — user quick info */}
-          <div className="flex items-center gap-4">
+          {/* Right side — notifications & user quick info */}
+          <div className="flex items-center gap-3">
+            <NotificationPopover />
             <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-lg bg-violet-500/10 text-violet-400 text-xs font-medium border border-violet-500/20">
               {userRole}
             </span>

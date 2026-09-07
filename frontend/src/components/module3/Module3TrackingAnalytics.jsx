@@ -86,7 +86,7 @@ export default function Module3TrackingAnalytics({ jobId, job, resultsData }) {
       const res = await getAIJobResults(jobId);
       setData(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || "Failed to load Module 3 results.");
+      setError(err.response?.data?.detail || "Failed to load shopper tracking analytics.");
     } finally {
       setLoading(false);
     }
@@ -218,7 +218,7 @@ export default function Module3TrackingAnalytics({ jobId, job, resultsData }) {
     return (
       <div className="p-12 text-center">
         <div className="w-8 h-8 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-sm text-gray-400">Loading Module 3 tracking & movement analytics...</p>
+        <p className="text-sm text-gray-400">Loading shopper tracking & movement analytics...</p>
       </div>
     );
   }
@@ -226,7 +226,7 @@ export default function Module3TrackingAnalytics({ jobId, job, resultsData }) {
   if (error) {
     return (
       <div className="p-8 text-center bg-red-500/5 border border-red-500/20 rounded-2xl">
-        <p className="text-sm font-medium text-red-400 mb-2">Module 3 Analytics Unavailable</p>
+        <p className="text-sm font-medium text-red-400 mb-2">Tracking Analytics Unavailable</p>
         <p className="text-xs text-gray-500 max-w-md mx-auto mb-4">{error}</p>
         <button
           onClick={fetchResults}
@@ -249,7 +249,7 @@ export default function Module3TrackingAnalytics({ jobId, job, resultsData }) {
         </div>
         <div className="flex-1">
           <p className="text-xs font-semibold text-violet-200">
-            Module 3 Multi-Phase Tracking & Dwell Intelligence
+            Shopper Tracking & Dwell Intelligence
           </p>
           <p className="text-[11px] text-violet-300/70 mt-0.5 leading-relaxed">
             Covers YOLO Person Detection, ByteTrack Persistent Identification, Trajectory Analysis,
@@ -666,9 +666,9 @@ export default function Module3TrackingAnalytics({ jobId, job, resultsData }) {
             {/* Header controls */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-4 border-b border-gray-800">
               <div>
-                <h4 className="text-sm font-semibold text-white">Module 3 Master Attention & Tracking Report</h4>
+                <h4 className="text-sm font-semibold text-white">Shopper Attention & Tracking Master Dossier</h4>
                 <p className="text-xs text-gray-500">
-                  Comprehensive Phase 6 report exportable in Markdown and JSON formats
+                  Comprehensive tracking intelligence report exportable in Markdown and JSON formats
                 </p>
               </div>
 
@@ -755,7 +755,7 @@ export default function Module3TrackingAnalytics({ jobId, job, resultsData }) {
             <div className="mb-4">
               <h4 className="text-sm font-semibold text-white">Pipeline Output Artifacts & Media</h4>
               <p className="text-xs text-gray-500">
-                Raw output files generated across all 6 phases of the Module 3 pipeline
+                Raw output files and telemetry generated across all tracking pipeline stages
               </p>
             </div>
 
@@ -836,7 +836,7 @@ export default function Module3TrackingAnalytics({ jobId, job, resultsData }) {
 
 function generateFallbackMarkdown(summary, shoppers, zones, targets) {
   const lines = [
-    "# Module 3 — Consumer Tracking & Movement Analytics Report",
+    "# Consumer Tracking & Movement Analytics Report",
     "",
     "> **Phase 6: Executive Attention & Movement Report**",
     "",

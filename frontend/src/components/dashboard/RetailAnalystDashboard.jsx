@@ -4,6 +4,7 @@
  * Product Attractiveness Reports, Customer Journey Analytics.
  */
 import React from "react";
+import ActiveAlertsCard from "./ActiveAlertsCard";
 import { useNavigate } from "react-router-dom";
 
 function KpiCard({ icon, label, value, sub, color = "text-white" }) {
@@ -78,7 +79,10 @@ export default function RetailAnalystDashboard({ analytics, loading }) {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* ── 1. Consumer Behavior Analytics ──────────────────────── */}
+      {/* ── Active Alerts (Module 11) ──────────────────────────── */}
+      <ActiveAlertsCard />
+
+      {/* ── 1. Consumer Behavior Analytics ────────────────────── */}
       <section>
         <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
           <span>🧬</span> Consumer Behavior Analytics

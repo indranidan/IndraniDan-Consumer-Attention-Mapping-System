@@ -1,58 +1,88 @@
 version: '3.8'
 
+# =============================================================================
+# Consumer Attention Mapping System (CAMS) — Hardened Production Compose
+# =============================================================================
+# Architecture:
+# - PostgreSQL 15: Relational data (Stores, Zones, Shelves, Products, Users, Roles)
+# - MongoDB 7.0: Analytical documents (Tracking trajectories, Dwell events, Heatmaps)
+# - Redis 7.0: Hybrid Pub/Sub event bus, caching & inter-module signaling
+# - Backend: FastAPI application & asynchronous AI pipeline workers
+# - Frontend: Nginx reverse proxy serving React 18 / Vite single-page application
+# =============================================================================
+
 services:
-  # ── PostgreSQL: Relational Data (Users, Stores, Zones, Products) ──
+  # ── 1. PostgreSQL: Relational Storage ──────────────────────────────────────
   postgres:
     image: postgres:15-alpine
     container_name: cams_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: consumer_attention_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+      POSTGRES_DB: ${POSTGRES_DB:-consumer_attention_db}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d consumer_attention_db"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-consumer_attention_db}"]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # ── MongoDB: AI Outputs, Trajectories, Events, and Reports ─────────
+  # ── 2. MongoDB: Analytical Document & Time-Series Store ─────────────────────
   mongodb:
     image: mongo:7.0
     container_name: cams_mongodb
     restart: unless-stopped
     environment:
-      MONGO_INITDB_DATABASE: consumer_attention_ai_db
+      MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME:-consumer_attention_ai_db}
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # ── Redis: Event Broker & In-Memory Cache ───────────────────────────
+  # ── 3. Redis: Pub/Sub Event Bus & Low-Latency Cache ─────────────────────────
   redis:
     image: redis:7-alpine
     container_name: cams_redis
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 5
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # ── Backend: FastAPI & AI Worker Services ──────────────────────────
+  # ── 4. Backend: FastAPI REST & AI Processing Engine ─────────────────────────
   backend:
     build:
       context: .
@@ -60,19 +90,21 @@ services:
     container_name: cams_backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/consumer_attention_db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-consumer_attention_db}
       MONGODB_URL: mongodb://mongodb:27017
-      MONGODB_DB_NAME: consumer_attention_ai_db
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:-consumer_attention_ai_db}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: change-this-in-production
-      ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 60
-      FRONTEND_URL: http://localhost:3000
-      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      SECRET_KEY: ${SECRET_KEY:-cams-super-secure-production-secret-key-min32chars}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
       AI_OUTPUT_PATH: storage/outputs/ai_jobs
       AI_INPUT_PATH: storage/uploads
+      REPORTS_OUTPUT_PATH: storage/outputs/reports
+      ENVIRONMENT: ${ENVIRONMENT:-production}
     volumes:
-      - ./storage:/app/storage
+      - cams_storage_data:/app/storage
     ports:
       - "8000:8000"
     depends_on:
@@ -82,8 +114,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
-  # ── Frontend: React 18 + Vite Web Application ──────────────────────
+  # ── 5. Frontend: React 18 + Vite SPA on Nginx Reverse Proxy ─────────────────
   frontend:
     build:
       context: ./frontend
@@ -93,7 +136,19 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   postgres_data:
@@ -101,4 +156,6 @@ volumes:
   mongo_data:
     driver: local
   redis_data:
+    driver: local
+  cams_storage_data:
     driver: local

@@ -187,3 +187,9 @@ def get_sync_mongo_db() -> Optional[SyncDatabase]:
             _sync_client = None
         logger.warning(f"Sync MongoDB connection unavailable ({exc}). Falling back to local storage.")
         return None
+
+
+def is_mongo_available() -> bool:
+    """Return True if synchronous MongoDB connection is operational."""
+    return get_sync_mongo_db() is not None
+

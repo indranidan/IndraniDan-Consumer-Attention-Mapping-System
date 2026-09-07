@@ -11,7 +11,6 @@ import {
   getJobRecommendations,
   runJobRecommendations,
 } from "../../services/recommendationService";
-import PlanogramSwapSimulator from "./PlanogramSwapSimulator";
 
 const CATEGORY_TABS = [
   { id: "ALL", label: "All Recommendations", icon: "✨" },
@@ -53,8 +52,6 @@ export default function RecommendationsDashboard({ jobId, storeId = null }) {
 
   const [activeCategory, setActiveCategory] = useState("ALL");
   const [activePriority, setActivePriority] = useState("ALL");
-  const [showSimulator, setShowSimulator] = useState(false);
-  const [simulatorProduct, setSimulatorProduct] = useState(null);
   const [expandedRecId, setExpandedRecId] = useState(null);
 
   const fetchRecommendations = async () => {
@@ -70,7 +67,7 @@ export default function RecommendationsDashboard({ jobId, storeId = null }) {
       setData(res);
     } catch (err) {
       console.error("Failed to load recommendations:", err);
-      setError(err?.response?.data?.detail || "Failed to load Module 9 recommendations");
+      setError(err?.response?.data?.detail || "Failed to load optimization recommendations");
     } finally {
       setLoading(false);
     }
@@ -95,19 +92,6 @@ export default function RecommendationsDashboard({ jobId, storeId = null }) {
     }
   };
 
-  const handleOpenSimulatorWithRec = (rec) => {
-    setSimulatorProduct({
-      id: rec.target_id,
-      name: rec.target_name,
-      current_tier: rec.shelf_swap_details?.from_tier || "BOTTOM",
-      target_tier: rec.shelf_swap_details?.to_tier || "EYE_LEVEL",
-      attractiveness_score: rec.current_metrics?.observed_attractiveness || 45.0,
-      intrinsic_score: rec.current_metrics?.intrinsic_attractiveness || 75.0,
-    });
-    setShowSimulator(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   const recommendations = data?.recommendations || [];
   const summary = data?.summary || {};
 
@@ -121,8 +105,8 @@ export default function RecommendationsDashboard({ jobId, storeId = null }) {
             <h2 className="text-xl font-bold text-white tracking-wide">
               Prescriptive Merchandising Intelligence
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-              MODULE 9
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+              Prescriptive Engine
             </span>
           </div>
           <p className="text-xs text-gray-400 mt-1">
@@ -131,18 +115,6 @@ export default function RecommendationsDashboard({ jobId, storeId = null }) {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowSimulator(!showSimulator)}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-all ${
-              showSimulator
-                ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-lg shadow-cyan-500/10"
-                : "bg-gray-800/80 text-gray-300 border-gray-700 hover:bg-gray-700/80"
-            }`}
-          >
-            <span>🔮</span>
-            {showSimulator ? "Hide Simulator" : "What-If Simulator"}
-          </button>
-
           <button
             onClick={handleRefresh}
             disabled={refreshing || loading}
@@ -153,13 +125,6 @@ export default function RecommendationsDashboard({ jobId, storeId = null }) {
           </button>
         </div>
       </div>
-
-      {/* ── Optional Simulator Section ────────────────────────── */}
-      {showSimulator && (
-        <div className="animate-fadeIn">
-          <PlanogramSwapSimulator initialProduct={simulatorProduct} />
-        </div>
-      )}
 
       {/* ── Summary KPI Cards ─────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -253,7 +218,7 @@ export default function RecommendationsDashboard({ jobId, storeId = null }) {
       {loading && !refreshing && (
         <div className="text-center py-16 text-gray-400 text-xs flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin" />
-          <span>Evaluating Module 9 prescriptive rules...</span>
+          <span>Evaluating prescriptive optimization rules...</span>
         </div>
       )}
 
@@ -365,37 +330,25 @@ export default function RecommendationsDashboard({ jobId, storeId = null }) {
                   )}
 
                   {rec.shelf_swap_details && (
-                    <div className="p-3 bg-purple-950/20 border border-purple-500/20 rounded-xl text-purple-300/90 flex items-center justify-between">
-                      <div>
-                        🔄 <strong>Shelf Movement:</strong> {rec.shelf_swap_details.from_tier} (γ={rec.shelf_swap_details.from_gamma}) → {rec.shelf_swap_details.to_tier} (γ={rec.shelf_swap_details.to_gamma})
-                      </div>
-                      <button
-                        onClick={() => handleOpenSimulatorWithRec(rec)}
-                        className="px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 rounded-lg text-[11px] font-semibold cursor-pointer"
-                      >
-                        Simulate in Studio ↗
-                      </button>
+                    <div className="p-3 bg-purple-950/20 border border-purple-500/20 rounded-xl text-purple-300/90">
+                      🔄 <strong>Suggested Shelf Movement:</strong> {rec.shelf_swap_details.from_tier} (γ={rec.shelf_swap_details.from_gamma}) → {rec.shelf_swap_details.to_tier} (γ={rec.shelf_swap_details.to_gamma})
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Card Footer: Expand toggle & Action Button */}
+              {/* Card Footer: Expand toggle & Status Badge */}
               <div className="mt-4 pt-3 flex items-center justify-between border-t border-gray-800/40">
                 <button
                   onClick={() => setExpandedRecId(isExpanded ? null : rec.id)}
                   className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1 font-medium cursor-pointer"
                 >
-                  <span>{isExpanded ? "▲ Hide Rationale" : "▼ View Analytical Details"}</span>
+                  <span>{isExpanded ? "▲ Hide Analytical Details" : "▼ View Analytical Details & Rationale"}</span>
                 </button>
 
-                <button
-                  onClick={() => handleOpenSimulatorWithRec(rec)}
-                  className="px-3 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
-                >
-                  <span>🔮</span>
-                  <span>Test in What-If Studio</span>
-                </button>
+                <span className="text-[11px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <span>✓</span> Active Prescriptive Action
+                </span>
               </div>
             </div>
           );

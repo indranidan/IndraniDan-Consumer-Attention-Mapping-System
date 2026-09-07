@@ -9,6 +9,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
+import { NotificationProvider } from "./context/NotificationContext";
 import ErrorBoundary from "./components/ui/ErrorBoundary";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AppLayout from "./components/layouts/AppLayout";
@@ -25,6 +26,7 @@ import Products from "./pages/Products";
 import Cameras from "./pages/Cameras";
 import AIAnalytics from "./pages/AIAnalytics";
 import Recommendations from "./pages/Recommendations";
+import ReportsHub from "./pages/ReportsHub";
 
 export default function App() {
   return (
@@ -32,6 +34,7 @@ export default function App() {
       <BrowserRouter>
         <AuthProvider>
           <ToastProvider>
+          <NotificationProvider>
             <Routes>
               {/* ── Public Routes ─────────────────────────────── */}
               <Route path="/login" element={<Login />} />
@@ -51,12 +54,14 @@ export default function App() {
                   <Route path="/cameras" element={<Cameras />} />
                   <Route path="/analytics" element={<AIAnalytics />} />
                   <Route path="/recommendations" element={<Recommendations />} />
+                  <Route path="/reports" element={<ReportsHub />} />
                 </Route>
               </Route>
 
               {/* ── Catch-all redirect ────────────────────────── */}
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
+          </NotificationProvider>
           </ToastProvider>
         </AuthProvider>
       </BrowserRouter>

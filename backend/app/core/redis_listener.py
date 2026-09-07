@@ -85,6 +85,35 @@ async def _process_job(job_id: str):
 
     logger.info(f"Finished async processing for job {job_id}")
 
+    # Module 11: Post-job alert evaluation
+    try:
+        from app.modules.alerts.evaluator import evaluate_post_job
+        job_uuid_for_alerts = uuid.UUID(job_id)
+        def _run_post_job_alerts():
+            with SessionLocal() as alert_db:
+                alerts = evaluate_post_job(alert_db, job_uuid_for_alerts)
+                if alerts:
+                    logger.info(f"Module 11: generated {len(alerts)} alert(s) for job {job_id}")
+                    # Broadcast alerts via StreamManager
+                    from app.core.job_stream import job_stream_manager
+                    for alert in alerts:
+                        job_stream_manager.broadcast_alert_sync({
+                            "type": "ALERT_CREATED",
+                            "alert": {
+                                "id": str(alert.id),
+                                "severity": alert.severity,
+                                "title": alert.title,
+                                "message": alert.message,
+                                "alert_type": alert.type,
+                                "entity_type": alert.entity_type,
+                                "entity_id": str(alert.entity_id) if alert.entity_id else None,
+                                "target_role": alert.target_role,
+                            },
+                        })
+        await loop.run_in_executor(None, _run_post_job_alerts)
+    except Exception as exc:
+        logger.warning(f"Module 11 post-job alert evaluation failed: {exc}")
+
 
 # ── Hybrid Event Dispatcher ───────────────────────────────────────────
 

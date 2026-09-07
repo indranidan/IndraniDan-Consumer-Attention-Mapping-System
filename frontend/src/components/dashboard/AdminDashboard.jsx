@@ -4,6 +4,7 @@
  * Camera Management, System Monitoring.
  */
 import React, { useState, useEffect } from "react";
+import ActiveAlertsCard from "./ActiveAlertsCard";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 
@@ -63,6 +64,9 @@ export default function AdminDashboard({ analytics, stats, loading }) {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* ── Active Alerts (Module 11) ──────────────────────────── */}
+      <ActiveAlertsCard />
+
       {/* ── 1. User Management ─────────────────────────────────── */}
       <section>
         <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">

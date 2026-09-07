@@ -29,7 +29,7 @@ from app.services.heatmap_service import (
     get_job_heatmap,
 )
 
-router = APIRouter(prefix="/api/heatmaps", tags=["Heatmaps (Module 7)"])
+router = APIRouter(prefix="/api/heatmaps", tags=["Spatial Attention Heatmaps"])
 
 
 @router.get(
