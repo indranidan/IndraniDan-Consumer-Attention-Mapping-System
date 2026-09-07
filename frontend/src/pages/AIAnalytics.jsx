@@ -109,7 +109,6 @@ export default function AIAnalytics() {
   const [resultsData, setResultsData] = useState(null);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
-  const [resultsTab, setResultsTab] = useState("module5"); // "module5" | "module4" | "module3"
 
 
   // Error modal

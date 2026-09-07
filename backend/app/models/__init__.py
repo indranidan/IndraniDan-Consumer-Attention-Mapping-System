@@ -13,6 +13,8 @@ from app.models.shelf import Shelf
 from app.models.product import Product
 from app.models.camera import Camera
 from app.models.ai_job import AIJob
+from app.models.notification import Notification
+from app.models.report import ReportRecord
 
 __all__ = [
     "Role",
@@ -23,5 +25,7 @@ __all__ = [
     "Product",
     "Camera",
     "AIJob",
+    "Notification",
+    "ReportRecord",
 ]
 

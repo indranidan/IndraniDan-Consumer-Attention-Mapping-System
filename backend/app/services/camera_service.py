@@ -7,13 +7,36 @@ Business logic for camera CRUD operations.
 import uuid
 from datetime import datetime, timezone
 
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session, joinedload
+# pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
 
 from app.models.camera import Camera
 from app.models.store import Store
 from app.models.zone import Zone
 from app.schemas.camera import CameraCreate, CameraUpdate, CameraResponse
+
+# Allowed camera source protocol schemes
+ALLOWED_CAMERA_SCHEMES = ("rtsp://", "rtsps://", "http://", "https://")
+
+
+def _validate_camera_source(source: str) -> str:
+    """Validate camera source is a sanctioned streaming protocol or local device index."""
+    if not source or not source.strip():
+        return source
+    s = source.strip()
+    # Allow numeric local device indices (e.g., "0", "1", "2")
+    if s.isdigit():
+        return s
+    # Allow sanctioned streaming protocol schemes
+    s_lower = s.lower()
+    if any(s_lower.startswith(scheme) for scheme in ALLOWED_CAMERA_SCHEMES):
+        return s
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Invalid camera source '{s}'. Allowed: numeric device index (0-9), or URL with schemes: {', '.join(ALLOWED_CAMERA_SCHEMES)}",
+    )
 
 
 def _to_response(camera: Camera) -> CameraResponse:
@@ -61,7 +84,7 @@ def create_camera(db: Session, payload: CameraCreate) -> CameraResponse:
         store_id=payload.store_id,
         zone_id=payload.zone_id,
         name=payload.name,
-        camera_source=payload.camera_source,
+        camera_source=_validate_camera_source(payload.camera_source) if payload.camera_source else payload.camera_source,
         location_description=payload.location_description,
         status=payload.status,
         created_at=datetime.now(timezone.utc),
@@ -150,6 +173,8 @@ def update_camera(
             )
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "camera_source" in update_data and update_data["camera_source"]:
+        update_data["camera_source"] = _validate_camera_source(update_data["camera_source"])
     for field, value in update_data.items():
         setattr(camera, field, value)
 
@@ -178,6 +203,7 @@ def probe_camera_stream(db: Session, camera_id: uuid.UUID) -> dict:
     """Test accessibility of camera stream URL or index with timeout."""
     import base64
     import time
+    # pyrefly: ignore [missing-import]
     import cv2
 
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
@@ -187,6 +213,7 @@ def probe_camera_stream(db: Session, camera_id: uuid.UUID) -> dict:
             detail=f"Camera with id '{camera_id}' not found.",
         )
     source = camera.camera_source.strip()
+    source = _validate_camera_source(source)
     cap_source = int(source) if source.isdigit() else source
 
     start = time.time()
@@ -232,6 +259,7 @@ def probe_camera_stream(db: Session, camera_id: uuid.UUID) -> dict:
 def capture_camera_snapshot(db: Session, camera_id: uuid.UUID) -> dict:
     """Capture a single JPEG snapshot from camera stream and return base64 data."""
     import base64
+    # pyrefly: ignore [missing-import]
     import cv2
 
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
@@ -241,6 +269,7 @@ def capture_camera_snapshot(db: Session, camera_id: uuid.UUID) -> dict:
             detail=f"Camera with id '{camera_id}' not found.",
         )
     source = camera.camera_source.strip()
+    source = _validate_camera_source(source)
     cap_source = int(source) if source.isdigit() else source
 
     cap = cv2.VideoCapture(cap_source)

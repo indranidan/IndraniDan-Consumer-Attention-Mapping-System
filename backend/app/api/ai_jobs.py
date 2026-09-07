@@ -267,13 +267,29 @@ def serve_ai_output_file(
 # ── Real-Time Streaming & Trajectory Endpoints ────────────────
 
 @router.websocket("/jobs/{job_id}/ws")
-async def ai_job_websocket_stream(websocket: WebSocket, job_id: uuid.UUID):
+async def ai_job_websocket_stream(websocket: WebSocket, job_id: uuid.UUID, token: str | None = Query(default=None)):
     """
-    WebSocket endpoint streaming live AI pipeline progress, frame metrics, and logs.
+    Authenticated WebSocket endpoint streaming live AI pipeline progress, frame metrics, and logs.
+    Connect with: ws://host/api/ai/jobs/{job_id}/ws?token=<jwt>
     """
     from app.core.job_stream import job_stream_manager
     # pyrefly: ignore [missing-import]
     from fastapi import WebSocketDisconnect
+
+    # Authenticate via JWT query param
+    if not token:
+        await websocket.close(code=4001, reason="Missing authentication token")
+        return
+
+    try:
+        payload = decode_access_token(token)
+        user_id = payload.get("user_id")
+        if not user_id:
+            await websocket.close(code=4001, reason="Invalid authentication token")
+            return
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid authentication token")
+        return
 
     job_key = str(job_id)
     await job_stream_manager.connect(job_key, websocket)

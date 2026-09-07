@@ -98,7 +98,7 @@ function UnifiedAIJobResultsModalContent() {
                   ? "bg-violet-600/50 text-violet-200 cursor-not-allowed"
                   : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-violet-600/30"
               }`}
-              title="Re-run Attention (M4), Interaction (M5), and Behavior (M6) analysis engines"
+              title="Re-run Attention, Interaction, and Behavioral analysis engines"
             >
               <svg
                 className={`w-4 h-4 ${reEvaluating ? "animate-spin" : ""}`}
@@ -138,9 +138,9 @@ function UnifiedAIJobResultsModalContent() {
         <div className="flex items-center gap-1.5 px-6 py-2.5 border-b border-gray-800/80 bg-gray-950/80 overflow-x-auto shrink-0 scrollbar-none">
           {[
             { id: "summary", label: "Executive Summary & Funnel", icon: "📊" },
-            { id: "behavior", label: "Consumer Behavior", icon: "🧠" },
-            { id: "heatmaps", label: "Spatial & Heatmaps", icon: "🔥" },
-            { id: "scoring", label: "Attractiveness & Scoring", icon: "🎯" },
+            { id: "behavior", label: "Behavioral Intelligence", icon: "🧠" },
+            { id: "heatmaps", label: "Spatial Attention & Heatmaps", icon: "🔥" },
+            { id: "scoring", label: "Product Attractiveness Scoring", icon: "🎯" },
             { id: "recommendations", label: "Prescriptive Optimization", icon: "💡" },
             { id: "matrix", label: "Shelf & Product Matrix", icon: "📦" },
             { id: "logs", label: "Shopper Journey Logs", icon: "🚶" },

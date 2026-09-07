@@ -44,10 +44,12 @@ class Settings(BaseSettings):
     # ── Application ───────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:5173"
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
+    ENVIRONMENT: str = "development"
 
     # ── AI Module ─────────────────────────────────────────────
     AI_OUTPUT_PATH: str = "storage/outputs/ai_jobs"
     AI_INPUT_PATH: str = "storage/uploads"
+    REPORTS_OUTPUT_PATH: str = "storage/outputs/reports"
     AI_PIPELINE_TIMEOUT: int = 3600
     AI_MAX_CONCURRENT_JOBS: int = 1
     WEBCAM_DEVICE: int = 0
@@ -70,10 +72,27 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
 
+# Insecure default keys that must never be used in production
+_INSECURE_SECRET_KEYS = {"change-this-in-production", "secret", ""}
+
+
 @lru_cache()
 def get_settings() -> Settings:
     """
     Returns a cached Settings instance.
     Uses lru_cache so the .env file is only read once per process.
     """
-    return Settings()
+    s = Settings()
+
+    # Production secret key guard
+    if s.ENVIRONMENT.lower() == "production" and s.SECRET_KEY in _INSECURE_SECRET_KEYS:
+        import logging
+        logger = logging.getLogger("security")
+        msg = (
+            "CRITICAL SECURITY WARNING: Running in production mode with an insecure default SECRET_KEY. "
+            "Set a strong, unique SECRET_KEY environment variable before deploying to production."
+        )
+        logger.critical(msg)
+        print(f"[SECURITY] {msg}")
+
+    return s

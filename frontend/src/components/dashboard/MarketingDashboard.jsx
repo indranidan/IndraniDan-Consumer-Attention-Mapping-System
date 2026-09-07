@@ -3,8 +3,8 @@
  * Sections: Campaign Effectiveness, Product Visibility Analytics,
  * Promotional Performance, Customer Engagement Metrics.
  */
-import React, { useState } from "react";
-import PlanogramSwapSimulator from "../recommendations/PlanogramSwapSimulator";
+import React from "react";
+import { useNavigate } from "react-router-dom";
 
 function KpiCard({ icon, label, value, sub, color = "text-white" }) {
   return (
@@ -41,8 +41,7 @@ export default function MarketingDashboard({ analytics, loading }) {
   const promo = mm.promotional_performance || {};
   const engagement = mm.engagement || {};
   const categoryGaze = visibility.category_gaze || {};
-
-  const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -59,51 +58,45 @@ export default function MarketingDashboard({ analytics, loading }) {
         <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
           <span>🚀</span> Campaign Effectiveness
         </h2>
-        <div className="grid grid-cols-2 gap-3">
-          <KpiCard
-            icon="📈"
-            label="Promotional Dwell Lift"
-            value={`+${campaign.promotional_dwell_lift_pct || 0}%`}
-            sub="vs baseline gaze duration"
-            color="text-emerald-400"
-          />
-          <KpiCard
-            icon="💎"
-            label="Marketing ROI Index"
-            value={campaign.marketing_roi_index || 0}
-            sub="Composite campaign score"
-            color="text-violet-400"
-          />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KpiCard icon="👁️" label="Eye-Level Lift" value={`+${campaign.eye_level_engagement_lift || 0}%`} sub="Visual priority score" color="text-violet-400" />
+          <KpiCard icon="🎯" label="Endcap Conversion" value={`+${campaign.endcap_conversion_increase || 0}%`} sub="Promotional endcap lift" color="text-emerald-400" />
+          <KpiCard icon="⚡" label="Promo Response" value={`${campaign.promo_response_rate || 0}%`} sub="Shoppers engaging promos" />
+          <KpiCard icon="✨" label="Top Campaign" value={campaign.top_performing_campaign || "N/A"} sub="Highest engagement" />
         </div>
       </section>
 
-      {/* ── 2. Product Visibility Analytics ─────────────────────── */}
+      {/* ── 2. Product Visibility Analytics ────────────────────── */}
       <section>
         <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span>👁️</span> Product Visibility Analytics
+          <span>👁️</span> Product Visibility by Category
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <KpiCard icon="🔝" label="Eye-Level Gaze Share" value={`${visibility.eye_level_share || 0}%`} sub="Of total shopper glances" color="text-emerald-400" />
-          <KpiCard icon="⬇️" label="Bottom-Shelf Share" value={`${visibility.bottom_shelf_share || 0}%`} sub="Lower visibility zone" color="text-amber-400" />
-          <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-5">
-            <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-3">📊 Category Attention Share</p>
-            <div className="space-y-2.5">
-              {Object.entries(categoryGaze).map(([cat, pct], i) => (
-                <BarSegment key={cat} label={cat} pct={pct} color={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
-              ))}
-            </div>
+        <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-5">
+          <div className="space-y-3">
+            {Object.entries(categoryGaze).length === 0 && (
+              <p className="text-xs text-gray-500 text-center py-4">No category visibility data available</p>
+            )}
+            {Object.entries(categoryGaze).map(([cat, pct], idx) => (
+              <BarSegment key={cat} label={cat} pct={pct} color={CATEGORY_COLORS[idx % CATEGORY_COLORS.length]} />
+            ))}
+          </div>
+          <div className="mt-4 pt-3 border-t border-gray-800 flex justify-between text-[11px] text-gray-400">
+            <span>Blind Spots: <strong className="text-rose-400">{visibility.blind_spot_zones?.join(", ") || "None"}</strong></span>
+            <span>Premium Dwell: <strong className="text-violet-400">{visibility.premium_shelf_dwell_share || 0}%</strong></span>
           </div>
         </div>
       </section>
 
-      {/* ── 3. Promotional Performance ──────────────────────────── */}
+      {/* ── 3. Promotional Performance ─────────────────────────── */}
       <section>
         <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span>🎪</span> Promotional Performance
+          <span>🏷️</span> Promotional Fixture Performance
         </h2>
-        <div className="grid grid-cols-2 gap-3">
-          <KpiCard icon="🏷️" label="End-Cap Engagement" value={`${promo.endcap_engagement_rate || 0}%`} sub="Display feature engagement" />
-          <KpiCard icon="🤝" label="Promo Interaction Yield" value={`${promo.promo_interaction_yield || 0}%`} sub="Featured SKU pickup rate" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KpiCard icon="🏷️" label="Active Promos" value={promo.active_promotions || 0} sub="Currently running" />
+          <KpiCard icon="🛒" label="Promo Pickups" value={promo.promo_product_pickups || 0} sub="Items selected" color="text-emerald-400" />
+          <KpiCard icon="⏱️" label="Dwell/Promo" value={`${promo.dwell_per_promo_sec || 0}s`} sub="Average attention span" />
+          <KpiCard icon="⭐" label="Endcap vs Aisle" value={`${promo.endcap_vs_aisle_ratio || 0}x`} sub="Endcap efficiency multiple" color="text-amber-400" />
         </div>
       </section>
 
@@ -120,34 +113,13 @@ export default function MarketingDashboard({ analytics, loading }) {
 
         <div className="mt-4">
           <button
-            onClick={() => setSimulatorOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-violet-600/20 transition-all hover:scale-[1.02]"
+            onClick={() => navigate("/recommendations")}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-violet-600/20 transition-all hover:scale-[1.02] cursor-pointer"
           >
-            <span>🔮</span> Launch Planogram What-If Simulator
+            <span>💡</span> View Actionable Merchandising Recommendations
           </button>
         </div>
       </section>
-
-      {/* ── Planogram Swap Simulator Modal ──────────────────────── */}
-      {simulatorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          {/* Backdrop click to close */}
-          <div className="absolute inset-0" onClick={() => setSimulatorOpen(false)} />
-          <div className="bg-gray-900 border border-gray-800 rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative z-10">
-            {/* Close button — prominent ✕ */}
-            <button
-              onClick={() => setSimulatorOpen(false)}
-              className="absolute top-4 right-4 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-gray-800 hover:bg-rose-600 border border-gray-700 hover:border-rose-500 text-gray-400 hover:text-white transition-all duration-200 shadow-lg"
-              aria-label="Close simulator"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            <PlanogramSwapSimulator />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

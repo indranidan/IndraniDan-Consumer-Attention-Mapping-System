@@ -2,7 +2,7 @@
  * Recommendations Page
  * =====================
  * Dedicated Merchandising & Prescriptive Optimization page.
- * Allows selecting store/job and exploring Module 9 recommendations and what-if simulations.
+ * Displays prioritized, rule-based product recommendations and action plans.
  */
 
 import { useState, useEffect } from "react";
@@ -64,7 +64,7 @@ export default function Recommendations() {
     <div className="space-y-6">
       <PageHeader
         title="Merchandising & Recommendations"
-        subtitle="Prescriptive AI decision engine for shelf tier rebalancing, opportunity swaps, and friction intervention."
+        subtitle="Rule-based prescriptive AI decision engine for shelf tier rebalancing, opportunity swaps, and friction intervention."
       />
 
       {/* Selectors */}

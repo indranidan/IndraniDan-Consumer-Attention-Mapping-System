@@ -99,7 +99,7 @@ export default function ProductScoringAnalytics({ jobId }) {
         setSelectedProduct(scores.products[0]);
       }
     } catch (err) {
-      setError("Failed to load Module 8 scoring analytics.");
+      setError("Failed to load product attractiveness scoring analytics.");
     } finally {
       setLoading(false);
     }

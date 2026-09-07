@@ -117,7 +117,7 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
       setData(res.data);
     } catch (err) {
       setError(
-        err.response?.data?.detail || "Failed to load Module 4 attention analytics."
+        err.response?.data?.detail || "Failed to load Gaze & Attention Analytics."
       );
     } finally {
       setLoading(false);
@@ -222,7 +222,7 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
     return (
       <div className="p-12 text-center">
         <div className="w-8 h-8 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-sm text-gray-400">Loading Module 4 Attention Engine results...</p>
+        <p className="text-sm text-gray-400">Loading Gaze & Attention Engine results...</p>
       </div>
     );
   }
@@ -671,7 +671,7 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
             {/* Header controls */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-4 border-b border-gray-800">
               <div>
-                <h4 className="text-sm font-semibold text-white">Module 4 Attention Analysis Report</h4>
+                <h4 className="text-sm font-semibold text-white">Gaze & Attention Intelligence Report</h4>
                 <p className="text-xs text-gray-500">
                   Detailed 3D head pose and shelf engagement analytics exportable in Markdown and JSON
                 </p>
@@ -791,7 +791,7 @@ export default function Module4AttentionAnalytics({ jobId, job }) {
 
 function generateModule4FallbackMarkdown(summary, shelves, products, quality) {
   const lines = [
-    "# Module 4 — Consumer Attention Analysis Report",
+    "# Consumer Attention & Gaze Intelligence Report",
     "",
     "> **Estimated Attention Analysis**: All metrics derived from 3D head orientation and proxy intersections.",
     "",

@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
+# pyrefly: ignore [missing-import]
 from fastapi import HTTPException, UploadFile, status
 
 from app.models.ai_job import AIJob
@@ -26,6 +28,10 @@ from app.schemas.ai_job import (
 )
 from app.services.ai_worker import run_pipeline, stop_job as worker_stop_job, get_running_job_count
 from app.core.config import get_settings
+
+# Maximum upload file size: 500 MB
+MAX_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024  # 524,288,000 bytes
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 
 
 def _get_project_root() -> Path:
@@ -140,26 +146,41 @@ def create_job(
     # 6. Resolve Input Source
     if input_type == "VIDEO_FILE":
         if upload_file:
-            allowed_exts = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
             file_ext = Path(upload_file.filename).suffix.lower() if upload_file.filename else ".mp4"
-            if file_ext not in allowed_exts:
+            if file_ext not in ALLOWED_VIDEO_EXTENSIONS:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Unsupported video format '{file_ext}'. Allowed formats: {', '.join(sorted(allowed_exts))}",
+                    detail=f"Unsupported video format '{file_ext}'. Allowed formats: {', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}",
                 )
 
             input_dir = project_root / settings.AI_INPUT_PATH
             input_dir.mkdir(parents=True, exist_ok=True)
             saved_path = input_dir / f"{job_id}{file_ext}"
 
-            # Stream chunks to prevent loading full file into memory
+            # Stream chunks with size enforcement (500 MB ceiling)
+            total_bytes = 0
             with open(saved_path, "wb") as buffer:
                 while chunk := upload_file.file.read(1024 * 1024):
+                    total_bytes += len(chunk)
+                    if total_bytes > MAX_UPLOAD_SIZE_BYTES:
+                        buffer.close()
+                        saved_path.unlink(missing_ok=True)
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"File size exceeds the maximum allowed limit of 500 MB.",
+                        )
                     buffer.write(chunk)
 
             source = str(saved_path)
         elif payload.source_override and payload.source_override.strip():
-            source = payload.source_override.strip()
+            # Canonicalize and confine source_override path
+            override_path = Path(payload.source_override.strip()).resolve()
+            if not str(override_path).startswith(str(project_root.resolve())):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Source override path is outside the allowed project directory.",
+                )
+            source = str(override_path)
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -171,15 +192,37 @@ def create_job(
             input_dir = project_root / settings.AI_INPUT_PATH
             input_dir.mkdir(parents=True, exist_ok=True)
             file_ext = Path(upload_file.filename).suffix.lower() if upload_file.filename else ".webm"
+            if file_ext not in ALLOWED_VIDEO_EXTENSIONS:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Unsupported video format '{file_ext}'. Allowed formats: {', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}",
+                )
             saved_path = input_dir / f"{job_id}_webcam{file_ext}"
 
+            # Stream chunks with size enforcement (500 MB ceiling)
+            total_bytes = 0
             with open(saved_path, "wb") as buffer:
                 while chunk := upload_file.file.read(1024 * 1024):
+                    total_bytes += len(chunk)
+                    if total_bytes > MAX_UPLOAD_SIZE_BYTES:
+                        buffer.close()
+                        saved_path.unlink(missing_ok=True)
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"File size exceeds the maximum allowed limit of 500 MB.",
+                        )
                     buffer.write(chunk)
 
             source = str(saved_path)
         elif payload.source_override and payload.source_override.strip():
-            source = payload.source_override.strip()
+            # Canonicalize and confine source_override path
+            override_path = Path(payload.source_override.strip()).resolve()
+            if not str(override_path).startswith(str(project_root.resolve())):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Source override path is outside the allowed project directory.",
+                )
+            source = str(override_path)
         else:
             source = str(settings.WEBCAM_DEVICE)
 

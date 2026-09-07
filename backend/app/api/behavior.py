@@ -22,8 +22,8 @@ from app.schemas.behavior import (
 )
 from app.services import behavior_service
 
-router = APIRouter(prefix="/api/behavior", tags=["Consumer Behavior (Module 6)"])
-router_v1 = APIRouter(prefix="/api/v1/behavior", tags=["Consumer Behavior (Module 6)"])
+router = APIRouter(prefix="/api/behavior", tags=["Consumer Behavior Intelligence"])
+router_v1 = APIRouter(prefix="/api/v1/behavior", tags=["Consumer Behavior Intelligence"])
 
 
 @router.post("/{job_id}/analyze", response_model=Module6TriggerResponse)
