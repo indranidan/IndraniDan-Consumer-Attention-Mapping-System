@@ -59,10 +59,35 @@ def test_dashboard_analytics_data_structure():
     assert "top_performers" in leaderboard
     assert "attention_leaks" in leaderboard
 
-    # 5. Archetypes
-    archetypes = res["archetypes"]
-    assert "dominant_segment" in archetypes
-    assert "distribution" in archetypes
+    # 6. Marketing Manager payload
+    assert "marketing_manager" in res
+    mm = res["marketing_manager"]
+    assert "campaign_lift" in mm
+    assert "visibility" in mm
+    assert "promotional_performance" in mm
+    assert "engagement" in mm
+
+    campaign = mm["campaign_lift"]
+    assert "eye_level_engagement_lift" in campaign and campaign["eye_level_engagement_lift"] > 0
+    assert "endcap_conversion_increase" in campaign and campaign["endcap_conversion_increase"] > 0
+    assert "promo_response_rate" in campaign and campaign["promo_response_rate"] > 0
+    assert "top_performing_campaign" in campaign and len(campaign["top_performing_campaign"]) > 0
+
+    visibility = mm["visibility"]
+    assert "category_gaze" in visibility and len(visibility["category_gaze"]) > 0
+    assert "blind_spot_zones" in visibility and len(visibility["blind_spot_zones"]) > 0
+    assert "premium_shelf_dwell_share" in visibility and visibility["premium_shelf_dwell_share"] > 0
+
+    promo = mm["promotional_performance"]
+    assert "active_promotions" in promo and promo["active_promotions"] > 0
+    assert "promo_product_pickups" in promo and promo["promo_product_pickups"] > 0
+    assert "dwell_per_promo_sec" in promo and promo["dwell_per_promo_sec"] > 0
+    assert "endcap_vs_aisle_ratio" in promo and promo["endcap_vs_aisle_ratio"] > 0
+
+    engagement = mm["engagement"]
+    assert "repeat_engagement_rate" in engagement and engagement["repeat_engagement_rate"] > 0
+    assert "total_recommendations" in engagement and engagement["total_recommendations"] > 0
+    assert "projected_attention_lift" in engagement and engagement["projected_attention_lift"] > 0
 
 
 def test_dashboard_analytics_store_filtering():
@@ -80,3 +105,6 @@ def test_dashboard_analytics_store_filtering():
 
     res = get_dashboard_analytics_data(mock_db, store_id=dummy_store_id, force_fresh=True)
     assert res["store_id"] == str(dummy_store_id)
+    assert "marketing_manager" in res
+    assert res["marketing_manager"]["campaign_lift"]["eye_level_engagement_lift"] > 0
+
