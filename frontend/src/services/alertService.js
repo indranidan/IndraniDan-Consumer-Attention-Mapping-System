@@ -109,11 +109,10 @@ export const createAlertWebSocket = ({
     return null;
   }
 
-  // Derive WebSocket URL from current page origin (works in both dev and production)
+  // Vercel does not support WebSockets. We must connect directly to the Render backend.
   const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsHost = API_BASE_URL
-    ? API_BASE_URL.replace(/^https?:\/\//, "")
-    : window.location.host;
+  const defaultWsHost = window.location.hostname === "localhost" ? "localhost:8000" : "cams-backend-gan7.onrender.com";
+  const wsHost = import.meta.env.VITE_WS_HOST || defaultWsHost;
   const wsUrl = `${wsProtocol}//${wsHost}/api/alerts/ws?token=${encodeURIComponent(token)}`;
 
   let isManualClose = false;
