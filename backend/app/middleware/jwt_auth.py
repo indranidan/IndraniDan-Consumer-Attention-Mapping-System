@@ -19,7 +19,7 @@ from app.utils.token import decode_access_token
 
 # ── OAuth2 scheme ─────────────────────────────────────────────
 # tokenUrl points to our login endpoint for Swagger UI integration.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/swagger-login")
 
 
 def get_current_user(

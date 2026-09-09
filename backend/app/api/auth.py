@@ -78,6 +78,25 @@ def register(
     return MessageResponse(message="User registered successfully.")
 
 
+from fastapi.security import OAuth2PasswordRequestForm
+
+# ── Swagger UI Login (Form Data) ──────────────────────────────
+@router.post(
+    "/swagger-login",
+    response_model=TokenResponse,
+    summary="Login for Swagger UI (Form Data)",
+    include_in_schema=False, # Hide this from the Swagger UI docs itself
+)
+def swagger_login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
+    """
+    Authenticate for Swagger UI.
+    Swagger UI sends username and password as form data, not JSON.
+    """
+    return authenticate_user(db, form_data.username, form_data.password)
+
 # ── Login ─────────────────────────────────────────────────────
 @router.post(
     "/login",

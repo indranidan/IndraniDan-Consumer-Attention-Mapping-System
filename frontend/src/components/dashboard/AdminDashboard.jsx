@@ -45,7 +45,7 @@ export default function AdminDashboard({ analytics, stats, loading }) {
   const [userLoading, setUserLoading] = useState(true);
 
   useEffect(() => {
-    api.get("/api/users/")
+    api.get("/api/users")
       .then((res) => setUserInfo(res.data))
       .catch(() => setUserInfo(null))
       .finally(() => setUserLoading(false));

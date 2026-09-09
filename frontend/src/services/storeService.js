@@ -365,7 +365,7 @@ export const createJobWebSocket = (jobId, onMessage, onError, onClose) => {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const defaultWsHost = window.location.hostname === "localhost" ? "localhost:8000" : "cams-backend-gan7.onrender.com";
   const host = import.meta.env.VITE_WS_HOST || defaultWsHost;
-  const token = localStorage.getItem("token") || "";
+  const token = localStorage.getItem("access_token") || "";
   const wsUrl = `${protocol}//${host}/api/ai/jobs/${jobId}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`;
   const ws = new WebSocket(wsUrl);
 
