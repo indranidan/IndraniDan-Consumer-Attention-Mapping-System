@@ -8,7 +8,7 @@
 import api from "./api";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  import.meta.env.VITE_API_BASE_URL || "";
 
 // ── REST API Helpers ─────────────────────────────────────────
 
@@ -109,9 +109,12 @@ export const createAlertWebSocket = ({
     return null;
   }
 
-  // Convert http(s) to ws(s)
-  const wsBase = API_BASE_URL.replace(/^http/, "ws");
-  const wsUrl = `${wsBase}/api/alerts/ws?token=${encodeURIComponent(token)}`;
+  // Derive WebSocket URL from current page origin (works in both dev and production)
+  const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsHost = API_BASE_URL
+    ? API_BASE_URL.replace(/^https?:\/\//, "")
+    : window.location.host;
+  const wsUrl = `${wsProtocol}//${wsHost}/api/alerts/ws?token=${encodeURIComponent(token)}`;
 
   let isManualClose = false;
   let pingInterval = null;

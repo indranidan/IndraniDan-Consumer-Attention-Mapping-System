@@ -363,7 +363,7 @@ export const getShopperTrajectory = (jobId, trackingId) =>
 
 export const createJobWebSocket = (jobId, onMessage, onError, onClose) => {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const host = window.location.hostname === "localhost" ? "localhost:8000" : window.location.host;
+  const host = window.location.host;
   const token = localStorage.getItem("token") || "";
   const wsUrl = `${protocol}//${host}/api/ai/jobs/${jobId}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`;
   const ws = new WebSocket(wsUrl);
