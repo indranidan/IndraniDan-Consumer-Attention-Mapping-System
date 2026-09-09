@@ -88,15 +88,10 @@ class PersonDetector:
         """Load the YOLOv8 model and validate person class."""
         model_path = self.config.person_model_path
 
-        # Validate model file exists
-        if not model_path.exists():
-            raise FileNotFoundError(
-                f"Person detection model not found at: {model_path}\n"
-                f"Please verify PERSON_MODEL_PATH in your .env file.\n"
-                f"A COCO-pretrained model (e.g., yolov8n.pt) includes the 'person' class."
-            )
+        # Ensure the parent directory exists so YOLO can download the model there if it's missing
+        model_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.logger.info(f"Loading person detection model: {model_path}")
+        self.logger.info(f"Loading person detection model: {model_path} (will download if missing)")
 
         try:
             self.model = YOLO(str(model_path))
