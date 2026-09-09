@@ -31,6 +31,11 @@ COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r /app/backend/requirements.txt
 
+# Install AI module dependencies (CPU-only PyTorch to minimize image size)
+COPY ai/requirements.txt /app/ai/requirements.txt
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    pip install -r /app/ai/requirements.txt
+
 # Copy backend application source and AI engine packages
 COPY backend /app/backend
 COPY ai /app/ai
