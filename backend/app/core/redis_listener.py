@@ -175,6 +175,15 @@ async def redis_event_listener_task():
                     job_id = data.get("job_id")
                     if job_id:
                         asyncio.create_task(_process_job(job_id))
+                elif data.get("event") == "STOP_JOB":
+                    job_id = data.get("job_id")
+                    if job_id:
+                        try:
+                            from app.services.ai_worker import stop_job as worker_stop_job
+                            import uuid
+                            worker_stop_job(uuid.UUID(job_id))
+                        except Exception as e:
+                            logger.error(f"Error executing STOP_JOB for {job_id}: {e}")
 
             await asyncio.sleep(0.1)
         except asyncio.CancelledError:

@@ -236,6 +236,7 @@ def run_pipeline(
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
+    env["PYTHONUNBUFFERED"] = "1"
 
     # Redirect all phase outputs to job-specific directory
     env["AI_JOB_OUTPUT_PATH"] = str(job_output_dir)

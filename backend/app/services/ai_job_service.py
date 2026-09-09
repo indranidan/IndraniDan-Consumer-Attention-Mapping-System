@@ -341,7 +341,14 @@ def request_stop(
         db.commit()
         db.refresh(job)
     else:
-        # Try to stop the running process
+        # Publish STOP_JOB event so the correct worker process can kill it
+        try:
+            from app.core.redis_listener import dispatch_job_event
+            dispatch_job_event("STOP_JOB", str(job_id))
+        except Exception:
+            pass
+
+        # Try to stop the running process locally just in case Redis is disabled
         stopped = worker_stop_job(job_id)
         if not stopped:
             # Process may have already finished; refresh from DB
