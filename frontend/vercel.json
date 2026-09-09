@@ -7,15 +7,10 @@
     {
       "source": "/ws/:path*",
       "destination": "https://cams-backend-gan7.onrender.com/ws/:path*"
-    }
-  ],
-  "routes": [
-    {
-      "handle": "filesystem"
     },
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
