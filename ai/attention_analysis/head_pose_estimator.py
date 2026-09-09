@@ -122,14 +122,21 @@ class HeadPoseEstimator:
                 "Install it with: pip install 'mediapipe>=0.10.0,<1.0.0'"
             )
 
-        # Resolve model path
         resolved_path = model_path or _DEFAULT_MODEL_PATH
         if not resolved_path.exists():
-            raise FileNotFoundError(
-                f"FaceLandmarker model not found at: {resolved_path}\n"
-                f"Download it from: https://storage.googleapis.com/mediapipe-models/"
-                f"face_landmarker/face_landmarker/float16/1/face_landmarker.task"
-            )
+            url = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+            self.logger.info(f"Downloading FaceLandmarker model to {resolved_path}...")
+            resolved_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                import urllib.request
+                urllib.request.urlretrieve(url, str(resolved_path))
+                self.logger.info("FaceLandmarker model downloaded successfully.")
+            except Exception as e:
+                raise FileNotFoundError(
+                    f"FaceLandmarker model not found at: {resolved_path}\n"
+                    f"Failed to download automatically: {e}\n"
+                    f"Please download it manually from: {url}"
+                )
 
         self.logger.info(f"Loading FaceLandmarker model: {resolved_path}")
 
