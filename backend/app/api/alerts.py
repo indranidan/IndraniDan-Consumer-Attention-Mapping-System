@@ -183,8 +183,12 @@ async def alert_websocket(websocket: WebSocket, token: str | None = None):
     # pyrefly: ignore [missing-import]
     from fastapi import WebSocketDisconnect
 
+    # Accept handshake first to avoid abnormal 1006 closures
+    await websocket.accept()
+
     # Authenticate via JWT query param
     if not token:
+        await websocket.send_json({"type": "error", "message": "Missing authentication token"})
         await websocket.close(code=4001, reason="Missing authentication token")
         return
 
@@ -192,6 +196,7 @@ async def alert_websocket(websocket: WebSocket, token: str | None = None):
         payload = decode_access_token(token)
         role = payload.get("role", "all")
     except Exception:
+        await websocket.send_json({"type": "error", "message": "Invalid authentication token"})
         await websocket.close(code=4001, reason="Invalid authentication token")
         return
 

@@ -291,7 +291,13 @@ def get_jobs(
     List AI jobs with optional filters.
     Returns (items, total_count).
     """
-    query = db.query(AIJob)
+    from sqlalchemy.orm import joinedload
+
+    query = db.query(AIJob).options(
+        joinedload(AIJob.camera),
+        joinedload(AIJob.store),
+        joinedload(AIJob.creator),
+    )
 
     if store_id:
         query = query.filter(AIJob.store_id == store_id)
@@ -351,8 +357,17 @@ def request_stop(
         # Try to stop the running process locally just in case Redis is disabled
         stopped = worker_stop_job(job_id)
         if not stopped:
-            # Process may have already finished; refresh from DB
+            # Worker process not found in local memory (likely lost after
+            # a container restart).  Force-transition the DB record to STOPPED
+            # so the concurrency lock is released.
             db.refresh(job)
+            if job.status in ("QUEUED", "RUNNING"):
+                job.status = "STOPPED"
+                job.error_message = "Job was stopped by user (process terminated or completed)."
+                job.completed_at = datetime.now(timezone.utc)
+                job.updated_at = datetime.now(timezone.utc)
+                db.commit()
+                db.refresh(job)
 
     return _to_response(job)
 

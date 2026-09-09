@@ -362,11 +362,30 @@ export const getShopperTrajectory = (jobId, trackingId) =>
   api.get(`/api/ai/jobs/${jobId}/trajectories/${trackingId}`);
 
 export const createJobWebSocket = (jobId, onMessage, onError, onClose) => {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const defaultWsHost = window.location.hostname === "localhost" ? "localhost:8000" : "cams-backend-gan7.onrender.com";
-  const host = import.meta.env.VITE_WS_HOST || defaultWsHost;
   const token = localStorage.getItem("access_token") || "";
-  const wsUrl = `${protocol}//${host}/api/ai/jobs/${jobId}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+
+  // Resolve WebSocket host dynamically from API base URL
+  let wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  let wsHost;
+
+  const explicitWsHost = import.meta.env.VITE_WS_HOST;
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
+  if (explicitWsHost) {
+    wsHost = explicitWsHost;
+  } else if (apiBaseUrl) {
+    try {
+      const parsed = new URL(apiBaseUrl);
+      wsHost = parsed.host;
+      wsProtocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+    } catch (_) {
+      wsHost = window.location.host;
+    }
+  } else {
+    wsHost = window.location.host;
+  }
+
+  const wsUrl = `${wsProtocol}//${wsHost}/api/ai/jobs/${jobId}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`;
   const ws = new WebSocket(wsUrl);
 
   ws.onmessage = (event) => {

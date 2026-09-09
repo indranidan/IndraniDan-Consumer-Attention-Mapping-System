@@ -176,6 +176,9 @@ export default function AIAnalytics() {
     );
     if (hasActive) {
       pollRef.current = setInterval(fetchJobs, 5000);
+    } else {
+      // No active jobs — clear polling and reset WS state
+      if (pollRef.current) clearInterval(pollRef.current);
     }
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -193,10 +196,20 @@ export default function AIAnalytics() {
     }
 
     let ws = null;
+    let reconnectTimeout = null;
+    let isCancelled = false;
+
     try {
       ws = createJobWebSocket(
         runningJobId,
         (msg) => {
+          if (isCancelled) return;
+          // Handle server-side error messages (e.g., auth failure)
+          if (msg.type === "error") {
+            console.warn("WebSocket server error:", msg.message);
+            setWsConnected(false);
+            return;
+          }
           setWsConnected(true);
           if (msg.type === "log" && msg.message) {
             setLiveLogs((prev) => [...prev.slice(-150), msg.message]);
@@ -204,14 +217,28 @@ export default function AIAnalytics() {
             fetchJobs();
           }
         },
-        () => setWsConnected(false),
-        () => setWsConnected(false)
+        () => {
+          if (!isCancelled) setWsConnected(false);
+        },
+        (event) => {
+          if (!isCancelled) {
+            setWsConnected(false);
+            // Only attempt reconnect if the job is still running and close was abnormal
+            if (event?.code !== 1000 && event?.code !== 4001) {
+              reconnectTimeout = setTimeout(() => {
+                if (!isCancelled) fetchJobs();
+              }, 5000);
+            }
+          }
+        }
       );
     } catch (e) {
       console.warn("WebSocket connection error:", e);
     }
 
     return () => {
+      isCancelled = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (ws) ws.close();
     };
   }, [runningJobId, fetchJobs]);

@@ -81,6 +81,22 @@ async def lifespan(app: FastAPI):
             db_session.commit()
         db_target = settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else "Active"
         print(f"[INFO] PostgreSQL: Connected ✅ ({db_target})")
+
+        # Reconcile orphaned AI jobs from prior container lifetimes
+        try:
+            with SessionLocal() as orphan_db:
+                result = orphan_db.execute(text(
+                    "UPDATE ai_jobs SET status = 'STOPPED', "
+                    "error_message = 'Job terminated due to server restart', "
+                    "completed_at = NOW() "
+                    "WHERE status IN ('RUNNING', 'QUEUED');"
+                ))
+                orphan_db.commit()
+                orphan_count = result.rowcount
+                if orphan_count > 0:
+                    print(f"[INFO] Orphan reconciliation: {orphan_count} stale job(s) marked STOPPED ✅")
+        except Exception as exc:
+            print(f"[WARNING] Orphan reconciliation failed: {exc}")
     except Exception as exc:
         print(f"[WARNING] PostgreSQL: Connection check failed ❌ ({exc})")
 
@@ -276,6 +292,7 @@ app.add_middleware(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

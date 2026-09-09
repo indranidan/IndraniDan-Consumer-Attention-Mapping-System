@@ -25,8 +25,7 @@ from app.models.shelf import Shelf
 from app.models.product import Product
 from app.models.ai_job import AIJob
 from app.repositories.ai_document_repository import AIDocumentRepository
-from app.services.scoring_service import _get_m8_analysis
-from app.services.recommendation_service import _get_m9_analysis
+
 
 logger = logging.getLogger("dashboard_service")
 
@@ -104,11 +103,13 @@ def get_dashboard_analytics_data(
         recent_query = recent_query.filter(AIJob.store_id == store_id)
     all_recent_jobs = recent_query.order_by(desc(AIJob.created_at)).limit(6).all()
 
-    # 3. Batch fetch analysis documents
+    # 3. Batch fetch analysis documents (all modules in single $in queries)
     all_job_ids = list(set([str(j.id) for j in completed_jobs] + [str(j.id) for j in all_recent_jobs]))
     m4_batch = AIDocumentRepository.get_batch_module4_analyses_sync(all_job_ids)
     m5_batch = AIDocumentRepository.get_batch_module5_analyses_sync(all_job_ids)
     m6_batch = AIDocumentRepository.get_batch_module6_analyses_sync(all_job_ids)
+    m8_batch = AIDocumentRepository.get_batch_module8_analyses_sync(all_job_ids)
+    m9_batch = AIDocumentRepository.get_batch_module9_analyses_sync(all_job_ids)
 
     # 4. Aggregators
     total_passersby = 0
@@ -132,8 +133,8 @@ def get_dashboard_analytics_data(
         m4_doc = m4_batch.get(job_id_str, {})
         m5_doc = m5_batch.get(job_id_str, {})
         m6_doc = m6_batch.get(job_id_str, {})
-        m8_doc = _get_m8_analysis(job_id_str)
-        m9_doc = _get_m9_analysis(job_id_str)
+        m8_doc = m8_batch.get(job_id_str)
+        m9_doc = m9_batch.get(job_id_str)
 
         # M4 Gaze Attention
         if m4_doc:

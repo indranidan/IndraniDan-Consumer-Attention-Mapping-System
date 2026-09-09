@@ -276,8 +276,12 @@ async def ai_job_websocket_stream(websocket: WebSocket, job_id: uuid.UUID, token
     # pyrefly: ignore [missing-import]
     from fastapi import WebSocketDisconnect
 
+    # Accept handshake first to avoid abnormal 1006 closures
+    await websocket.accept()
+
     # Authenticate via JWT query param
     if not token:
+        await websocket.send_json({"type": "error", "message": "Missing authentication token"})
         await websocket.close(code=4001, reason="Missing authentication token")
         return
 
@@ -285,9 +289,11 @@ async def ai_job_websocket_stream(websocket: WebSocket, job_id: uuid.UUID, token
         payload = decode_access_token(token)
         user_id = payload.get("user_id")
         if not user_id:
+            await websocket.send_json({"type": "error", "message": "Invalid authentication token"})
             await websocket.close(code=4001, reason="Invalid authentication token")
             return
     except Exception:
+        await websocket.send_json({"type": "error", "message": "Invalid authentication token"})
         await websocket.close(code=4001, reason="Invalid authentication token")
         return
 

@@ -445,6 +445,70 @@ class AIDocumentRepository:
         return results
 
     @classmethod
+    def get_batch_module8_analyses_sync(cls, job_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Batch fetch Module 8 attractiveness scoring documents for multiple jobs."""
+        if not job_ids:
+            return {}
+        results: Dict[str, Dict[str, Any]] = {}
+        db = get_sync_mongo_db()
+        if db is not None:
+            try:
+                cursor = db["module8_scoring"].find(
+                    {"job_id": {"$in": job_ids}},
+                    {"_id": 0}
+                )
+                for doc in cursor:
+                    jid = doc.get("job_id")
+                    if jid:
+                        results[jid] = doc.get("analysis", {})
+            except Exception as exc:
+                logger.warning(f"Batch M8 query failed: {exc}")
+
+        # Fallback to in-memory stores used by scoring_service
+        try:
+            from app.services.scoring_service import _m8_memory_store
+            for jid in job_ids:
+                if jid not in results:
+                    mem_doc = _m8_memory_store.get(jid)
+                    if mem_doc:
+                        results[jid] = mem_doc.get("analysis", {})
+        except ImportError:
+            pass
+        return results
+
+    @classmethod
+    def get_batch_module9_analyses_sync(cls, job_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Batch fetch Module 9 recommendation documents for multiple jobs."""
+        if not job_ids:
+            return {}
+        results: Dict[str, Dict[str, Any]] = {}
+        db = get_sync_mongo_db()
+        if db is not None:
+            try:
+                cursor = db["module9_recommendations"].find(
+                    {"job_id": {"$in": job_ids}},
+                    {"_id": 0}
+                )
+                for doc in cursor:
+                    jid = doc.get("job_id")
+                    if jid:
+                        results[jid] = doc.get("analysis", {})
+            except Exception as exc:
+                logger.warning(f"Batch M9 query failed: {exc}")
+
+        # Fallback to in-memory stores used by recommendation_service
+        try:
+            from app.services.recommendation_service import _m9_memory_store
+            for jid in job_ids:
+                if jid not in results:
+                    mem_doc = _m9_memory_store.get(jid)
+                    if mem_doc:
+                        results[jid] = mem_doc.get("analysis", {})
+        except ImportError:
+            pass
+        return results
+
+    @classmethod
     def get_ai_document_sync(cls, job_id: str, collection_name: str) -> Optional[Dict[str, Any]]:
         """Generic sync document retrieval helper for any AI collection."""
         db = get_sync_mongo_db()
