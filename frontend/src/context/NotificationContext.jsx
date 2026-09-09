@@ -61,8 +61,10 @@ export function NotificationProvider({ children }) {
     setIsLoading(true);
     try {
       const data = await getAlerts(params);
+      console.log("[NotificationContext] Fetched alerts:", data);
       setNotifications(Array.isArray(data) ? data : (data?.data || []));
-    } catch {
+    } catch (err) {
+      console.error("[NotificationContext] Failed to fetch alerts:", err);
       // Silently fail
     } finally {
       setIsLoading(false);
