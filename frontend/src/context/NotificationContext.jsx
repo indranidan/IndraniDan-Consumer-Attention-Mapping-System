@@ -61,7 +61,7 @@ export function NotificationProvider({ children }) {
     setIsLoading(true);
     try {
       const data = await getAlerts(params);
-      setNotifications(data);
+      setNotifications(Array.isArray(data) ? data : (data?.data || []));
     } catch {
       // Silently fail
     } finally {
