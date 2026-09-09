@@ -140,11 +140,8 @@ def load_person_detection_config() -> PersonDetectionConfig:
         if best_model_raw:
             person_model_path = _resolve_model_path(best_model_raw)
         else:
-            raise RuntimeError(
-                "Neither PERSON_MODEL_PATH nor BEST_MODEL_PATH is set in .env.\n"
-                "Please set PERSON_MODEL_PATH to a COCO-pretrained YOLOv8 model "
-                "(e.g., yolov8n.pt) that includes the 'person' class."
-            )
+            # Fall back to default COCO model instead of crashing
+            person_model_path = _resolve_model_path("ai/models/yolov8n.pt")
 
     # Detection settings
     confidence_threshold = float(

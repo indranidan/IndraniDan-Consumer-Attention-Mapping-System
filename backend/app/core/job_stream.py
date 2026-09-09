@@ -38,8 +38,7 @@ class JobStreamManager:
     # ── Per-Job Streaming (backward-compatible) ───────────────
 
     async def connect(self, job_id: str, websocket: WebSocket) -> None:
-        """Accept and register a new client connection."""
-        await websocket.accept()
+        """Register a WebSocket client for a specific AI job stream."""
         if job_id not in self._connections:
             self._connections[job_id] = set()
         self._connections[job_id].add(websocket)
@@ -91,7 +90,6 @@ class JobStreamManager:
 
     async def connect_alert_client(self, websocket: WebSocket, role: str = "all") -> None:
         """Register a WebSocket client for system alert broadcasts."""
-        await websocket.accept()
         self._alert_connections.add(websocket)
         if role not in self._alert_role_map:
             self._alert_role_map[role] = set()

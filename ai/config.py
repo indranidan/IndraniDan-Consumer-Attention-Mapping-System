@@ -31,13 +31,9 @@ def _ensure_env_loaded() -> None:
     from dotenv import load_dotenv
 
     env_path = _PROJECT_ROOT / ".env"
-    if not env_path.exists():
-        raise RuntimeError(
-            f".env file not found at {env_path}\n"
-            f"Copy .env.example to .env and fill in your values."
-        )
-
-    load_dotenv(dotenv_path=env_path)
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+    
     _env_loaded = True
 
 
@@ -114,8 +110,8 @@ def load_config() -> AIConfig:
     """
     _ensure_env_loaded()
 
-    coco_path = Path(_require_env("COCO_DATASET_PATH"))
-    sku110k_path = Path(_require_env("SKU110K_DATASET_PATH"))
+    coco_path = Path(_optional_env("COCO_DATASET_PATH", ""))
+    sku110k_path = Path(_optional_env("SKU110K_DATASET_PATH", ""))
     yolo_model = _optional_env("YOLO_MODEL_NAME", "yolov8n.pt")
     yolo_output = Path(
         _optional_env("YOLO_OUTPUT_PATH", str(_AI_DIR / "outputs"))
